@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DocumentScanner
+import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -55,6 +56,7 @@ fun ScanScreen(
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
 
+    // ── ML Kit camera / gallery scanner ────────────────────────
     val scannerOptions = GmsDocumentScannerOptions.Builder()
         .setGalleryImportAllowed(true)
         .setPageLimit(1)
@@ -78,6 +80,17 @@ fun ScanScreen(
         }
     }
 
+    // ── PDF file picker (Storage Access Framework) ─────────────
+    // Opens the system file picker filtered to PDFs only.
+    // The returned URI is permanent-read granted by SAF — no MANAGE_EXTERNAL_STORAGE needed.
+    val pdfLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) viewModel.analyzePdf(uri)
+        else viewModel.clearError()
+    }
+
+    // ── Navigation / error side-effects ────────────────────────
     LaunchedEffect(state) {
         if (state is ScanUiState.Success) {
             navController.navigate(
@@ -96,6 +109,7 @@ fun ScanScreen(
         }
     }
 
+    // ── Layout ─────────────────────────────────────────────────
     Scaffold(
         topBar = {
             TopAppBar(
@@ -142,6 +156,9 @@ fun ScanScreen(
                 }
 
                 else -> {
+                    val buttonsEnabled = state !is ScanUiState.Scanning &&
+                            state !is ScanUiState.Analyzing
+
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -168,6 +185,8 @@ fun ScanScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(modifier = Modifier.height(40.dp))
+
+                        // Camera scan
                         Button(
                             onClick = {
                                 viewModel.onScannerOpened()
@@ -180,12 +199,13 @@ fun ScanScreen(
                                     .addOnFailureListener { viewModel.clearError() }
                             },
                             modifier = Modifier.fillMaxWidth(),
-                            enabled = state !is ScanUiState.Scanning &&
-                                    state !is ScanUiState.Analyzing
+                            enabled = buttonsEnabled
                         ) {
                             Text("Scan Document")
                         }
                         Spacer(modifier = Modifier.height(12.dp))
+
+                        // Gallery image import (ML Kit)
                         OutlinedButton(
                             onClick = {
                                 viewModel.onScannerOpened()
@@ -198,10 +218,24 @@ fun ScanScreen(
                                     .addOnFailureListener { viewModel.clearError() }
                             },
                             modifier = Modifier.fillMaxWidth(),
-                            enabled = state !is ScanUiState.Scanning &&
-                                    state !is ScanUiState.Analyzing
+                            enabled = buttonsEnabled
                         ) {
                             Text("Choose from Gallery")
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // PDF file import
+                        OutlinedButton(
+                            onClick = { pdfLauncher.launch(arrayOf("application/pdf")) },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = buttonsEnabled
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PictureAsPdf,
+                                contentDescription = null
+                            )
+                            Spacer(modifier = Modifier.size(8.dp))
+                            Text("Pick a PDF")
                         }
                     }
                 }
