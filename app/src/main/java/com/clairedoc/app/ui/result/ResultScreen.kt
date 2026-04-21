@@ -13,10 +13,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import android.content.Intent
+import android.provider.CalendarContract
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Card
@@ -49,6 +53,7 @@ import com.clairedoc.app.ui.theme.toColor
 import com.clairedoc.app.ui.theme.toContainerColor
 import com.clairedoc.app.ui.theme.toLabel
 import java.time.LocalDate
+import java.time.ZoneId
 import java.time.format.DateTimeParseException
 
 @Suppress("UNUSED_PARAMETER")
@@ -248,25 +253,56 @@ private fun ActionRow(action: ActionItem) {
         action.deadline?.let { deadline ->
             Spacer(Modifier.height(4.dp))
             Row(modifier = Modifier.padding(start = 16.dp)) {
-                DeadlineChip(deadline = deadline)
+                DeadlineChip(title = action.description, deadline = deadline)
             }
         }
     }
 }
 
 @Composable
-private fun DeadlineChip(deadline: String) {
+private fun DeadlineChip(title: String, deadline: String) {
     val isUrgent = isDeadlineWithin7Days(deadline)
+    val context = LocalContext.current
     SuggestionChip(
-        onClick = {},
+        onClick = { addToCalendar(context, title, deadline) },
         label = { Text("Due $deadline") },
+        icon = {
+            Icon(
+                imageVector = Icons.Default.CalendarMonth,
+                contentDescription = "Add to calendar",
+                modifier = Modifier.size(16.dp)
+            )
+        },
         colors = SuggestionChipDefaults.suggestionChipColors(
             containerColor = if (isUrgent) UrgencyRed.copy(alpha = 0.12f)
                              else MaterialTheme.colorScheme.surfaceVariant,
             labelColor = if (isUrgent) UrgencyRed
-                         else MaterialTheme.colorScheme.onSurfaceVariant
+                         else MaterialTheme.colorScheme.onSurfaceVariant,
+            iconContentColor = if (isUrgent) UrgencyRed
+                               else MaterialTheme.colorScheme.onSurfaceVariant
         )
     )
+}
+
+private fun addToCalendar(context: android.content.Context, title: String, deadline: String) {
+    val epochMillis = runCatching {
+        LocalDate.parse(deadline)
+            .atStartOfDay(ZoneId.systemDefault())
+            .toInstant()
+            .toEpochMilli()
+    }.getOrNull() ?: return
+
+    val intent = Intent(Intent.ACTION_INSERT).apply {
+        data = CalendarContract.Events.CONTENT_URI
+        putExtra(CalendarContract.Events.TITLE, title)
+        putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, epochMillis)
+        putExtra(CalendarContract.EXTRA_EVENT_END_TIME, epochMillis + 3_600_000L)
+        putExtra(CalendarContract.Events.ALL_DAY, true)
+        putExtra(CalendarContract.Events.DESCRIPTION, "Added by ClaireDoc")
+    }
+    if (intent.resolveActivity(context.packageManager) != null) {
+        context.startActivity(intent)
+    }
 }
 
 @Composable
