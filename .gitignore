@@ -32,3 +32,6 @@ google-services.json
 
 # Android Profiling
 *.hprof
+
+# Model files (2.58 GB — never commit)
+*.litertlm

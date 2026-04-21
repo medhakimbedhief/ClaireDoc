@@ -1,0 +1,72 @@
+[versions]
+agp = "8.3.2"
+# Kotlin 2.1.0: stable Kotlin 2.x release, compatible with AGP 8.3.x and Hilt 2.56.2.
+# Kotlin 2.0+ requires the org.jetbrains.kotlin.plugin.compose plugin instead of
+# composeOptions { kotlinCompilerExtensionVersion }.
+# KSP 2.1.0-1.0.29 matches Kotlin 2.1.0 exactly — version prefix must match.
+kotlin = "2.1.0"
+ksp = "2.1.0-1.0.29"
+hilt = "2.56.2"
+compose-bom = "2024.04.01"
+navigation = "2.7.7"
+room = "2.6.1"
+# litertlm-android versioning: 0.1.0 does not exist. Actual releases start at 0.7.0.
+# Latest stable as of 2026-04-17 is 0.10.2, hosted on google() Maven.
+litertlm = "0.10.2"
+mediapipe-genai = "0.10.24"
+mlkit-docscanner = "16.0.0-beta1"
+# localagents-fc 0.1.0 exists on ai-edge-maven-release repo (kept for FC SDK per CLAUDE.md)
+localagents-fc = "0.1.0"
+gson = "2.10.1"
+coroutines = "1.8.0"
+activity-compose = "1.9.0"
+lifecycle = "2.7.0"
+hilt-navigation-compose = "1.2.0"
+
+[libraries]
+# Compose
+compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "compose-bom" }
+compose-ui = { group = "androidx.compose.ui", name = "ui" }
+compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
+compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
+compose-material3 = { group = "androidx.compose.material3", name = "material3" }
+compose-material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended" }
+compose-activity = { group = "androidx.activity", name = "activity-compose", version.ref = "activity-compose" }
+compose-navigation = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigation" }
+compose-lifecycle-viewmodel = { group = "androidx.lifecycle", name = "lifecycle-viewmodel-compose", version.ref = "lifecycle" }
+compose-lifecycle-runtime = { group = "androidx.lifecycle", name = "lifecycle-runtime-compose", version.ref = "lifecycle" }
+
+# Hilt
+hilt-android = { group = "com.google.dagger", name = "hilt-android", version.ref = "hilt" }
+hilt-compiler = { group = "com.google.dagger", name = "hilt-android-compiler", version.ref = "hilt" }
+hilt-navigation-compose = { group = "androidx.hilt", name = "hilt-navigation-compose", version.ref = "hilt-navigation-compose" }
+
+# Room
+room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
+room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
+room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
+
+# AI / LiteRT
+litertlm-android = { group = "com.google.ai.edge.litertlm", name = "litertlm-android", version.ref = "litertlm" }
+mediapipe-genai = { group = "com.google.mediapipe", name = "tasks-genai", version.ref = "mediapipe-genai" }
+localagents-fc = { group = "com.google.ai.edge.localagents", name = "localagents-fc", version.ref = "localagents-fc" }
+
+# ML Kit
+mlkit-docscanner = { group = "com.google.android.gms", name = "play-services-mlkit-document-scanner", version.ref = "mlkit-docscanner" }
+
+# Gson
+gson = { group = "com.google.code.gson", name = "gson", version.ref = "gson" }
+
+# Coroutines
+coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
+
+# Core
+androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version = "1.13.0" }
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+# Required for Kotlin 2.0+: replaces composeOptions { kotlinCompilerExtensionVersion }
+kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+hilt = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }
+ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }

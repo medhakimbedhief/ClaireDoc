@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Base theme — Compose handles all styling; this is the minimum required
+         by the manifest android:theme attribute. -->
+    <style name="Theme.ClaireDoc" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>
