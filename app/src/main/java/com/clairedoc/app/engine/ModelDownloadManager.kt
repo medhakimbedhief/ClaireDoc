@@ -5,6 +5,7 @@ import android.content.Context
 import android.net.Uri
 import android.util.Log
 import com.clairedoc.app.data.model.DownloadProgress
+import com.clairedoc.app.data.model.ModelVariant
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -17,36 +18,49 @@ import javax.inject.Inject
 private const val TAG = "ClaireDoc_Download"
 private const val PREFS_NAME = "clairedoc_prefs"
 private const val KEY_DOWNLOAD_ID = "download_id"
+private const val KEY_DOWNLOAD_VARIANT = "download_variant"
 private const val POLL_INTERVAL_MS = 500L
+
+/** Minimum file size to consider a model file valid (guards against partial downloads). */
+internal const val MIN_MODEL_SIZE_BYTES = 100_000_000L
 
 class ModelDownloadManager @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
-    companion object {
-        const val MODEL_URL =
-            "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm"
-        const val MODEL_FILENAME = "gemma-4-E2B-it.litertlm"
-    }
-
     private val downloadManager =
         context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
 
     private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
-    /**
-     * Enqueues a new [DownloadManager] request and persists the download ID.
-     * Returns the download ID assigned by the system.
-     *
-     * The destination directory is created here — DownloadManager does not
-     * create parent directories automatically.
-     */
-    fun startDownload(): Long {
-        val destDir = context.getExternalFilesDir("models")!!.also { it.mkdirs() }
-        val destFile = File(destDir, MODEL_FILENAME)
+    // ──────────────────────────────────────────────────────────
+    //  Variant helpers
+    // ──────────────────────────────────────────────────────────
 
-        val request = DownloadManager.Request(Uri.parse(MODEL_URL))
-            .setTitle("ClaireDoc — Gemma 4 E2B")
-            .setDescription("Downloading AI model (2.58 GB)")
+    private fun modelsDir(): File =
+        context.getExternalFilesDir("models")!!.also { it.mkdirs() }
+
+    fun modelFileFor(variant: ModelVariant): File = File(modelsDir(), variant.filename)
+
+    fun isVariantInstalled(variant: ModelVariant): Boolean {
+        val f = modelFileFor(variant)
+        return f.exists() && f.length() >= MIN_MODEL_SIZE_BYTES
+    }
+
+    // ──────────────────────────────────────────────────────────
+    //  Download
+    // ──────────────────────────────────────────────────────────
+
+    /**
+     * Enqueues a [DownloadManager] request for [variant].
+     * Persists both the download ID and variant name so the session can be resumed.
+     * Returns the system-assigned download ID.
+     */
+    fun startDownload(variant: ModelVariant = ModelVariant.E2B): Long {
+        val destFile = modelFileFor(variant)
+
+        val request = DownloadManager.Request(Uri.parse(variant.url))
+            .setTitle("ClaireDoc — ${variant.displayName}")
+            .setDescription("Downloading AI model (${variant.approximateSizeGb})")
             .setDestinationUri(Uri.fromFile(destFile))
             .setNotificationVisibility(
                 DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED
@@ -55,15 +69,14 @@ class ModelDownloadManager @Inject constructor(
             .setAllowedOverRoaming(false)
 
         val id = downloadManager.enqueue(request)
-        prefs.edit().putLong(KEY_DOWNLOAD_ID, id).apply()
-        Log.d(TAG, "Download enqueued, id=$id, dest=${destFile.absolutePath}")
+        prefs.edit()
+            .putLong(KEY_DOWNLOAD_ID, id)
+            .putString(KEY_DOWNLOAD_VARIANT, variant.name)
+            .apply()
+        Log.d(TAG, "Download enqueued for ${variant.name}, id=$id → ${destFile.absolutePath}")
         return id
     }
 
-    /**
-     * Polls [DownloadManager] every [POLL_INTERVAL_MS] ms and emits
-     * [DownloadProgress] until the download completes or fails.
-     */
     fun observeProgress(downloadId: Long): Flow<DownloadProgress> = flow {
         while (true) {
             val progress = queryProgress(downloadId)
@@ -87,7 +100,6 @@ class ModelDownloadManager @Inject constructor(
             val total = c.getLong(
                 c.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES)
             ).coerceAtLeast(0L)
-
             DownloadProgress(
                 bytesDownloaded = downloaded,
                 totalBytes = total,
@@ -98,12 +110,42 @@ class ModelDownloadManager @Inject constructor(
         } ?: DownloadProgress(0L, 0L, isComplete = false, isFailed = true)
     }
 
-    /** Returns the persisted download ID, or -1L if none has been started. */
     fun getSavedDownloadId(): Long = prefs.getLong(KEY_DOWNLOAD_ID, -1L)
+
+    /** Returns the variant that was being downloaded in the last session, or null. */
+    fun getSavedDownloadVariant(): ModelVariant? {
+        val name = prefs.getString(KEY_DOWNLOAD_VARIANT, null) ?: return null
+        return runCatching { ModelVariant.valueOf(name) }.getOrNull()
+    }
 
     fun cancelDownload(downloadId: Long) {
         downloadManager.remove(downloadId)
-        prefs.edit().remove(KEY_DOWNLOAD_ID).apply()
+        prefs.edit()
+            .remove(KEY_DOWNLOAD_ID)
+            .remove(KEY_DOWNLOAD_VARIANT)
+            .apply()
         Log.d(TAG, "Download cancelled, id=$downloadId")
+    }
+
+    // ──────────────────────────────────────────────────────────
+    //  Delete
+    // ──────────────────────────────────────────────────────────
+
+    /**
+     * Deletes the model file for [variant] from disk.
+     * Also cancels any in-progress download for the same variant.
+     * Returns true if the file no longer exists afterwards.
+     */
+    fun deleteModel(variant: ModelVariant): Boolean {
+        val savedId = getSavedDownloadId()
+        if (savedId != -1L && getSavedDownloadVariant() == variant) {
+            cancelDownload(savedId)
+        }
+        val file = modelFileFor(variant)
+        if (!file.exists()) return true
+        return file.delete().also { deleted ->
+            if (deleted) Log.d(TAG, "Deleted ${variant.filename}")
+            else Log.w(TAG, "Failed to delete ${variant.filename}")
+        }
     }
 }

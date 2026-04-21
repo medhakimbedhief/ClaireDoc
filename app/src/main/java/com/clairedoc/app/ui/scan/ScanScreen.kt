@@ -15,16 +15,19 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DocumentScanner
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -42,6 +45,7 @@ import com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions
 import com.google.mlkit.vision.documentscanner.GmsDocumentScanning
 import com.google.mlkit.vision.documentscanner.GmsDocumentScanningResult
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ScanScreen(
     navController: NavController,
@@ -51,7 +55,6 @@ fun ScanScreen(
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
 
-    // Configure ML Kit Document Scanner
     val scannerOptions = GmsDocumentScannerOptions.Builder()
         .setGalleryImportAllowed(true)
         .setPageLimit(1)
@@ -68,28 +71,21 @@ fun ScanScreen(
             val scanResult = GmsDocumentScanningResult
                 .fromActivityResultIntent(activityResult.data)
             val imageUri = scanResult?.pages?.firstOrNull()?.imageUri
-            if (imageUri != null) {
-                viewModel.analyzeDocument(imageUri)
-            } else {
-                viewModel.clearError()
-            }
+            if (imageUri != null) viewModel.analyzeDocument(imageUri)
+            else viewModel.clearError()
         } else {
             viewModel.clearError()
         }
     }
 
-    // Navigate to result on success
     LaunchedEffect(state) {
         if (state is ScanUiState.Success) {
             navController.navigate(
                 NavRoutes.resultRoute((state as ScanUiState.Success).resultJson)
-            ) {
-                launchSingleTop = true
-            }
+            ) { launchSingleTop = true }
         }
     }
 
-    // Show error in snackbar
     LaunchedEffect(state) {
         if (state is ScanUiState.Error) {
             snackbarHostState.showSnackbar(
@@ -101,6 +97,21 @@ fun ScanScreen(
     }
 
     Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("ClaireDoc") },
+                actions = {
+                    IconButton(
+                        onClick = { navController.navigate(NavRoutes.MODEL_MANAGER) }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Manage AI Model"
+                        )
+                    }
+                }
+            )
+        },
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
     ) { paddingValues ->
         Box(
@@ -166,12 +177,7 @@ fun ScanScreen(
                                             IntentSenderRequest.Builder(intentSender).build()
                                         )
                                     }
-                                    .addOnFailureListener { ex ->
-                                        // ML Kit scanner is a Play Services feature module;
-                                        // may need to download on first use.
-                                        viewModel.clearError()
-                                        // Show message via state
-                                    }
+                                    .addOnFailureListener { viewModel.clearError() }
                             },
                             modifier = Modifier.fillMaxWidth(),
                             enabled = state !is ScanUiState.Scanning &&

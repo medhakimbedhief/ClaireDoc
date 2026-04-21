@@ -9,7 +9,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.clairedoc.app.engine.LiteRTEngine
-import com.clairedoc.app.ui.download.DownloadScreen
+import com.clairedoc.app.ui.model.ModelManagerScreen
 import com.clairedoc.app.ui.result.ResultScreen
 import com.clairedoc.app.ui.scan.ScanScreen
 import com.clairedoc.app.ui.theme.ClaireDocTheme
@@ -26,19 +26,25 @@ class MainActivity : ComponentActivity() {
         setContent {
             ClaireDocTheme {
                 val navController = rememberNavController()
-                // If the model is already on device, skip straight to scan.
+
+                // If a model is already installed skip straight to scan.
+                // Otherwise land on the Model Manager so the user can pick E2B or E4B.
                 val startDestination = if (liteRTEngine.isModelPresent) {
                     NavRoutes.SCAN
                 } else {
-                    NavRoutes.DOWNLOAD
+                    NavRoutes.MODEL_MANAGER
                 }
 
                 NavHost(
                     navController = navController,
                     startDestination = startDestination
                 ) {
-                    composable(NavRoutes.DOWNLOAD) {
-                        DownloadScreen(navController = navController)
+                    // First-launch model download / ongoing model management
+                    composable(NavRoutes.MODEL_MANAGER) {
+                        ModelManagerScreen(
+                            navController = navController,
+                            canNavigateBack = navController.previousBackStackEntry != null
+                        )
                     }
 
                     composable(NavRoutes.SCAN) {
@@ -51,8 +57,6 @@ class MainActivity : ComponentActivity() {
                             navArgument("resultJson") { type = NavType.StringType }
                         )
                     ) {
-                        // ResultViewModel reads resultJson from SavedStateHandle directly
-                        // and URL-decodes it there. No need to parse it here.
                         ResultScreen(
                             resultJson = "",  // unused — ViewModel reads from SavedStateHandle
                             navController = navController

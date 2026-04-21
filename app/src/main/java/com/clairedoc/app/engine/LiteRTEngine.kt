@@ -9,6 +9,7 @@ import com.google.ai.edge.litertlm.ConversationConfig
 import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
 import com.google.ai.edge.litertlm.Message
+import com.clairedoc.app.data.model.ModelVariant
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -24,9 +25,6 @@ import kotlinx.coroutines.flow.asStateFlow
 
 private const val TAG = "ClaireDoc_Engine"
 private const val MODEL_DIR = "models"
-private const val MODEL_FILENAME = "gemma-4-E2B-it.litertlm"
-// Model is 2.58 GB; guard against a half-downloaded file sitting on disk.
-private const val MIN_MODEL_SIZE_BYTES = 100_000_000L
 
 class LiteRTEngine @Inject constructor(
     @ApplicationContext private val context: Context
@@ -38,15 +36,30 @@ class LiteRTEngine @Inject constructor(
     private val _state = MutableStateFlow<EngineState>(EngineState.Uninitialized)
     val state: StateFlow<EngineState> = _state.asStateFlow()
 
+    /**
+     * Returns the first valid model file found on disk, scanning all known variants.
+     * Falls back to the E2B path if nothing is installed (engine will fail gracefully).
+     */
     val modelFile: File
-        get() = File(context.getExternalFilesDir(MODEL_DIR), MODEL_FILENAME)
+        get() {
+            val dir = context.getExternalFilesDir(MODEL_DIR) ?: return File("")
+            return ModelVariant.entries
+                .map { File(dir, it.filename) }
+                .firstOrNull { it.exists() && it.length() >= MIN_MODEL_SIZE_BYTES }
+                ?: File(dir, ModelVariant.E2B.filename)
+        }
 
     /**
-     * Returns true only when the model file exists AND its size is above the
-     * minimum threshold — guards against partial downloads.
+     * Returns true if any known model variant is present and above the minimum size threshold.
      */
     val isModelPresent: Boolean
-        get() = modelFile.exists() && modelFile.length() >= MIN_MODEL_SIZE_BYTES
+        get() {
+            val dir = context.getExternalFilesDir(MODEL_DIR) ?: return false
+            return ModelVariant.entries.any { variant ->
+                val f = File(dir, variant.filename)
+                f.exists() && f.length() >= MIN_MODEL_SIZE_BYTES
+            }
+        }
 
     /**
      * Initialises the LiteRT-LM engine on [Dispatchers.IO].
