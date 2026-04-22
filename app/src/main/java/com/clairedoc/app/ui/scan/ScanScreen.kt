@@ -41,6 +41,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
+import com.clairedoc.app.data.model.SourceType
 import com.clairedoc.app.ui.NavRoutes
 import com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions
 import com.google.mlkit.vision.documentscanner.GmsDocumentScanning
@@ -93,8 +94,9 @@ fun ScanScreen(
     // ── Navigation / error side-effects ────────────────────────
     LaunchedEffect(state) {
         if (state is ScanUiState.Success) {
+            val s = state as ScanUiState.Success
             navController.navigate(
-                NavRoutes.resultRoute((state as ScanUiState.Success).resultJson)
+                NavRoutes.resultRoute(s.resultJson, s.sessionId)
             ) { launchSingleTop = true }
         }
     }
@@ -189,7 +191,7 @@ fun ScanScreen(
                         // Camera scan
                         Button(
                             onClick = {
-                                viewModel.onScannerOpened()
+                                viewModel.onScannerOpened(SourceType.CAMERA)
                                 scanner.getStartScanIntent(context as android.app.Activity)
                                     .addOnSuccessListener { intentSender ->
                                         scannerLauncher.launch(
@@ -208,7 +210,7 @@ fun ScanScreen(
                         // Gallery image import (ML Kit)
                         OutlinedButton(
                             onClick = {
-                                viewModel.onScannerOpened()
+                                viewModel.onScannerOpened(SourceType.GALLERY)
                                 scanner.getStartScanIntent(context as android.app.Activity)
                                     .addOnSuccessListener { intentSender ->
                                         scannerLauncher.launch(

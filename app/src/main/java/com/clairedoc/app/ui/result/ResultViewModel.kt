@@ -27,9 +27,10 @@ class ResultViewModel @Inject constructor(
     private val _isSpeaking = MutableStateFlow(false)
     val isSpeaking: StateFlow<Boolean> = _isSpeaking.asStateFlow()
 
+    /** ID of the [DocumentSession] persisted for this result. Available for future history UI. */
+    val sessionId: String = Uri.decode(savedStateHandle.get<String>("sessionId").orEmpty())
+
     init {
-        // Navigation passes the JSON URL-encoded inside the route path.
-        // Uri.decode recovers the original JSON string.
         val encoded = savedStateHandle.get<String>("resultJson").orEmpty()
         val json = Uri.decode(encoded)
         if (json.isNotBlank()) {

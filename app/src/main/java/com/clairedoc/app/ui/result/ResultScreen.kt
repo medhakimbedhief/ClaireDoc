@@ -16,10 +16,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import android.content.Intent
 import android.provider.CalendarContract
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
@@ -57,6 +61,7 @@ import java.time.ZoneId
 import java.time.format.DateTimeParseException
 
 @Suppress("UNUSED_PARAMETER")
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ResultScreen(
     resultJson: String,  // unused here — ViewModel reads from SavedStateHandle
@@ -67,6 +72,19 @@ fun ResultScreen(
     val isSpeaking by viewModel.isSpeaking.collectAsState()
 
     Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Document") },
+                navigationIcon = {
+                    IconButton(onClick = { navController.popBackStack() }) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back"
+                        )
+                    }
+                }
+            )
+        },
         floatingActionButton = {
             if (result != null) {
                 ListenFAB(isSpeaking = isSpeaking, onClick = viewModel::toggleTTS)
@@ -79,9 +97,7 @@ fun ResultScreen(
                 result = r,
                 paddingValues = paddingValues,
                 onScanAnother = {
-                    navController.navigate(NavRoutes.SCAN) {
-                        popUpTo(NavRoutes.SCAN) { inclusive = true }
-                    }
+                    navController.popBackStack(NavRoutes.HOME, inclusive = false)
                 }
             )
         }
@@ -128,7 +144,7 @@ private fun ResultContent(
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp)
             ) {
-                Text("Scan Another Document")
+                Text("Done")
             }
         }
     }

@@ -3,6 +3,8 @@ package com.clairedoc.app.di
 import android.content.Context
 import androidx.room.Room
 import com.clairedoc.app.data.db.AppDatabase
+import com.clairedoc.app.data.db.DocumentSessionDao
+import com.clairedoc.app.data.db.MIGRATION_1_2
 import com.clairedoc.app.engine.LiteRTEngine
 import com.clairedoc.app.engine.ModelDownloadManager
 import com.clairedoc.app.pipeline.DocumentAnalyzer
@@ -68,5 +70,10 @@ object AppModule {
         context,
         AppDatabase::class.java,
         "clairedoc.db"
-    ).fallbackToDestructiveMigration().build()
+    ).addMigrations(MIGRATION_1_2).build()
+
+    @Singleton
+    @Provides
+    fun provideDocumentSessionDao(db: AppDatabase): DocumentSessionDao =
+        db.documentSessionDao()
 }

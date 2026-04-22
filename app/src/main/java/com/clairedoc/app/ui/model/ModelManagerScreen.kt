@@ -123,7 +123,7 @@ fun ModelManagerScreen(
                         if (canNavigateBack) {
                             navController.popBackStack()
                         } else {
-                            navController.navigate(NavRoutes.SCAN) {
+                            navController.navigate(NavRoutes.HOME) {
                                 popUpTo(NavRoutes.MODEL_MANAGER) { inclusive = true }
                             }
                         }

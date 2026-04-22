@@ -6,6 +6,8 @@ import android.graphics.pdf.PdfRenderer
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.clairedoc.app.data.model.SourceType
+import com.clairedoc.app.data.repository.DocumentSessionRepository
 import com.clairedoc.app.pipeline.DocumentAnalyzer
 import com.google.gson.Gson
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -21,9 +23,9 @@ import javax.inject.Inject
 
 sealed class ScanUiState {
     object Idle : ScanUiState()
-    object Scanning : ScanUiState()    // scanner UI is open
-    object Analyzing : ScanUiState()   // LiteRT inference running
-    data class Success(val resultJson: String) : ScanUiState()
+    object Scanning : ScanUiState()
+    object Analyzing : ScanUiState()
+    data class Success(val resultJson: String, val sessionId: String) : ScanUiState()
     data class Error(val message: String) : ScanUiState()
 }
 
@@ -31,28 +33,36 @@ sealed class ScanUiState {
 class ScanViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val documentAnalyzer: DocumentAnalyzer,
+    private val repository: DocumentSessionRepository,
     private val gson: Gson
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<ScanUiState>(ScanUiState.Idle)
     val uiState: StateFlow<ScanUiState> = _uiState.asStateFlow()
 
-    fun onScannerOpened() {
+    // Tracks which button opened the ML Kit scanner so the source type is correct.
+    private var pendingSourceType: SourceType = SourceType.CAMERA
+
+    fun onScannerOpened(sourceType: SourceType = SourceType.CAMERA) {
+        pendingSourceType = sourceType
         _uiState.value = ScanUiState.Scanning
     }
 
-    /** Called after ML Kit camera scan or gallery image pick. */
+    /** Camera scan or ML Kit gallery import. */
     fun analyzeDocument(imageUri: Uri) {
         _uiState.value = ScanUiState.Analyzing
         viewModelScope.launch(Dispatchers.IO) {
-            dispatchAnalysis(imageUri)
+            dispatchAnalysis(
+                analysisUri = imageUri,
+                sourceUri = imageUri.toString(),
+                sourceType = pendingSourceType
+            )
         }
     }
 
     /**
-     * Picks up a PDF [uri] from the Storage Access Framework, renders its first page
-     * to a JPEG using the built-in [PdfRenderer], then runs the same analysis pipeline
-     * as a camera scan. No extra libraries required (PdfRenderer is API 21+).
+     * Renders page 1 of a user-selected PDF via [PdfRenderer] (no extra library),
+     * then runs the same analysis pipeline as a camera scan.
      */
     fun analyzePdf(uri: Uri) {
         _uiState.value = ScanUiState.Analyzing
@@ -65,7 +75,11 @@ class ScanViewModel @Inject constructor(
                 return@launch
             }
             try {
-                dispatchAnalysis(Uri.fromFile(jpegFile))
+                dispatchAnalysis(
+                    analysisUri = Uri.fromFile(jpegFile),
+                    sourceUri = uri.toString(),
+                    sourceType = SourceType.PDF
+                )
             } finally {
                 jpegFile.delete()
             }
@@ -80,11 +94,16 @@ class ScanViewModel @Inject constructor(
     //  Private helpers
     // ──────────────────────────────────────────────────────────
 
-    private suspend fun dispatchAnalysis(uri: Uri) {
-        when (val result = documentAnalyzer.analyze(uri, context)) {
+    private suspend fun dispatchAnalysis(
+        analysisUri: Uri,
+        sourceUri: String,
+        sourceType: SourceType
+    ) {
+        when (val result = documentAnalyzer.analyze(analysisUri, context)) {
             is DocumentAnalyzer.AnalysisResult.Success -> {
+                val sessionId = repository.saveSession(result.result, sourceUri, sourceType)
                 val json = gson.toJson(result.result)
-                _uiState.value = ScanUiState.Success(json)
+                _uiState.value = ScanUiState.Success(json, sessionId)
             }
             is DocumentAnalyzer.AnalysisResult.Failure -> {
                 _uiState.value = ScanUiState.Error(
@@ -94,10 +113,6 @@ class ScanViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Renders page 0 of the PDF at [uri] to a temporary JPEG in [Context.getCacheDir].
-     * Returns null if the PDF cannot be opened, is empty, or rendering fails.
-     */
     private suspend fun renderPdfFirstPage(uri: Uri): File? = withContext(Dispatchers.IO) {
         runCatching {
             val pfd = context.contentResolver.openFileDescriptor(uri, "r")

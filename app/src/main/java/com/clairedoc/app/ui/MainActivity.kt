@@ -9,6 +9,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.clairedoc.app.engine.LiteRTEngine
+import com.clairedoc.app.ui.home.HomeScreen
 import com.clairedoc.app.ui.model.ModelManagerScreen
 import com.clairedoc.app.ui.result.ResultScreen
 import com.clairedoc.app.ui.scan.ScanScreen
@@ -27,10 +28,8 @@ class MainActivity : ComponentActivity() {
             ClaireDocTheme {
                 val navController = rememberNavController()
 
-                // If a model is already installed skip straight to scan.
-                // Otherwise land on the Model Manager so the user can pick E2B or E4B.
                 val startDestination = if (liteRTEngine.isModelPresent) {
-                    NavRoutes.SCAN
+                    NavRoutes.HOME
                 } else {
                     NavRoutes.MODEL_MANAGER
                 }
@@ -47,6 +46,10 @@ class MainActivity : ComponentActivity() {
                         )
                     }
 
+                    composable(NavRoutes.HOME) {
+                        HomeScreen(navController = navController)
+                    }
+
                     composable(NavRoutes.SCAN) {
                         ScanScreen(navController = navController)
                     }
@@ -54,7 +57,8 @@ class MainActivity : ComponentActivity() {
                     composable(
                         route = NavRoutes.RESULT,
                         arguments = listOf(
-                            navArgument("resultJson") { type = NavType.StringType }
+                            navArgument("resultJson") { type = NavType.StringType },
+                            navArgument("sessionId")  { type = NavType.StringType }
                         )
                     ) {
                         ResultScreen(

@@ -5,9 +5,10 @@ import android.net.Uri
 object NavRoutes {
     const val DOWNLOAD = "download"        // kept for backward compat (dead route)
     const val MODEL_MANAGER = "model_manager"
+    const val HOME = "home"
     const val SCAN = "scan"
-    const val RESULT = "result/{resultJson}"
+    const val RESULT = "result/{resultJson}/{sessionId}"
 
-    /** URL-encodes [json] and builds the full result route string. */
-    fun resultRoute(json: String): String = "result/${Uri.encode(json)}"
+    fun resultRoute(json: String, sessionId: String): String =
+        "result/${Uri.encode(json)}/${Uri.encode(sessionId)}"
 }
