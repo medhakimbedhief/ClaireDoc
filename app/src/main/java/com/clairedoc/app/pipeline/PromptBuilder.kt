@@ -22,6 +22,30 @@ class PromptBuilder @Inject constructor() {
     fun buildTextFallbackUserMessage(extractedText: String): String =
         "Analyze this document text and respond with the JSON schema:\n\n$extractedText"
 
+    /**
+     * System prompt for follow-up Q&A on an already-analysed document.
+     *
+     * IMPORTANT: this prompt must NOT include [SYSTEM_PROMPT] — that prompt
+     * instructs the model to output JSON only, which is the wrong behaviour here.
+     * This is a plain-language conversational system prompt.
+     *
+     * [analysisJson] is the Gson serialisation of the [DocumentResult] produced
+     * during the initial scan.  The model uses it as ground truth.
+     */
+    fun buildFollowUpSystemPrompt(analysisJson: String): String = buildString {
+        append("You are a helpful assistant that explains official documents to ordinary people.\n")
+        append("You have already analysed a document. Here is what you found:\n\n")
+        append(analysisJson)
+        append("\n\n")
+        append("The user has a follow-up question about this document.\n")
+        append("Answer in plain, simple language — like you are explaining to a 12-year-old.\n")
+        append("Do NOT output JSON. Do NOT start with the analysis again.\n")
+        append("Give a short, direct answer in 1 to 4 sentences.")
+    }
+
+    /** User turn for a follow-up question. */
+    fun buildFollowUpUserMessage(question: String): String = question
+
     companion object {
         // Keep this as a top-level companion constant so tests can assert
         // the exact string without instantiating the class.

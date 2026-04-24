@@ -128,4 +128,9 @@ class HomeViewModel @Inject constructor(
     fun deleteSession(id: String) {
         viewModelScope.launch { repository.deleteSession(id) }
     }
+
+    /** Wipes the Q&A chat history for [id] without deleting the session itself. */
+    fun clearConversation(id: String) {
+        viewModelScope.launch { repository.updateChatHistory(id, emptyList()) }
+    }
 }

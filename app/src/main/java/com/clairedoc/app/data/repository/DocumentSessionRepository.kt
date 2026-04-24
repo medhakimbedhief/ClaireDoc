@@ -3,6 +3,7 @@ package com.clairedoc.app.data.repository
 import com.clairedoc.app.data.db.DocumentSession
 import com.clairedoc.app.data.db.DocumentSessionDao
 import com.clairedoc.app.data.db.toDocumentSession
+import com.clairedoc.app.data.model.ChatMessage
 import com.clairedoc.app.data.model.DocumentResult
 import com.clairedoc.app.data.model.SessionStatus
 import com.clairedoc.app.data.model.SourceType
@@ -43,4 +44,9 @@ class DocumentSessionRepository @Inject constructor(
         dao.archive(id, System.currentTimeMillis())
 
     suspend fun deleteSession(id: String) = dao.delete(id)
+
+    suspend fun updateChatHistory(id: String, messages: List<ChatMessage>) {
+        val json = gson.toJson(messages)
+        dao.updateChatHistory(id, json, System.currentTimeMillis())
+    }
 }

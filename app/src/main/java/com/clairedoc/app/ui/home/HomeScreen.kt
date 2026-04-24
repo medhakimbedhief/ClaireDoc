@@ -23,7 +23,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddAPhoto
 import androidx.compose.material.icons.filled.Archive
-import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DocumentScanner
 import androidx.compose.material.icons.filled.DriveFileRenameOutline
@@ -212,6 +212,16 @@ fun HomeScreen(
                             }
                         )
                     }
+                    SheetAction(
+                        icon = Icons.Default.Chat,
+                        label = "Clear conversation",
+                        onClick = {
+                            viewModel.clearConversation(item.session.id)
+                            scope.launch { sheetState.hide() }
+                            showSheet = false
+                            selectedItem = null
+                        }
+                    )
                     SheetAction(
                         icon = Icons.Default.Archive,
                         label = "Archive",

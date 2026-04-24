@@ -5,6 +5,7 @@ import androidx.room.Room
 import com.clairedoc.app.data.db.AppDatabase
 import com.clairedoc.app.data.db.DocumentSessionDao
 import com.clairedoc.app.data.db.MIGRATION_1_2
+import com.clairedoc.app.data.db.MIGRATION_2_3
 import com.clairedoc.app.engine.LiteRTEngine
 import com.clairedoc.app.engine.ModelDownloadManager
 import com.clairedoc.app.pipeline.DocumentAnalyzer
@@ -70,7 +71,7 @@ object AppModule {
         context,
         AppDatabase::class.java,
         "clairedoc.db"
-    ).addMigrations(MIGRATION_1_2).build()
+    ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build()
 
     @Singleton
     @Provides

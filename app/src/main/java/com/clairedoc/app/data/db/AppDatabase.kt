@@ -8,12 +8,20 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [DocumentSession::class],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 @TypeConverters(DocumentSessionConverters::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun documentSessionDao(): DocumentSessionDao
+}
+
+val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(database: SupportSQLiteDatabase) {
+        database.execSQL(
+            "ALTER TABLE document_sessions ADD COLUMN chatHistoryJson TEXT NOT NULL DEFAULT '[]'"
+        )
+    }
 }
 
 val MIGRATION_1_2 = object : Migration(1, 2) {

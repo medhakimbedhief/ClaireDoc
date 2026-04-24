@@ -102,6 +102,10 @@ class ScanViewModel @Inject constructor(
         when (val result = documentAnalyzer.analyze(analysisUri, context)) {
             is DocumentAnalyzer.AnalysisResult.Success -> {
                 val sessionId = repository.saveSession(result.result, sourceUri, sourceType)
+                // Persist the scanned image while we still hold a valid URI grant.
+                // ML Kit content:// URIs expire after the activity-result callback returns,
+                // so we copy to internal storage now for use by follow-up Q&A later.
+                cacheImageForQA(sessionId, analysisUri)
                 val json = gson.toJson(result.result)
                 _uiState.value = ScanUiState.Success(json, sessionId)
             }
@@ -109,6 +113,24 @@ class ScanViewModel @Inject constructor(
                 _uiState.value = ScanUiState.Error(
                     result.message.ifBlank { "Analysis failed. Please try again." }
                 )
+            }
+        }
+    }
+
+    /**
+     * Copies [analysisUri] → `filesDir/qa_images/<sessionId>.jpg`.
+     * This permanent file is used by [ResultViewModel] for follow-up Q&A so the
+     * model has the original document image in context even after the one-shot
+     * ContentProvider grant for the scan URI has expired.
+     *
+     * Failures are silently swallowed — Q&A degrades gracefully to text-only mode.
+     */
+    private fun cacheImageForQA(sessionId: String, analysisUri: Uri) {
+        runCatching {
+            val dir = File(context.filesDir, "qa_images").also { it.mkdirs() }
+            val dest = File(dir, "$sessionId.jpg")
+            context.contentResolver.openInputStream(analysisUri)!!.use { input ->
+                dest.outputStream().use { output -> input.copyTo(output) }
             }
         }
     }

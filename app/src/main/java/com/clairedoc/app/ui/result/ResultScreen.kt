@@ -1,5 +1,11 @@
 package com.clairedoc.app.ui.result
 
+import android.content.Intent
+import android.provider.CalendarContract
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,53 +18,69 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import android.content.Intent
-import android.provider.CalendarContract
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.SuggestionChipDefaults
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.clairedoc.app.data.model.ActionItem
+import com.clairedoc.app.data.model.ChatMessage
 import com.clairedoc.app.data.model.DocumentResult
+import com.clairedoc.app.data.model.Role
 import com.clairedoc.app.data.model.UrgencyLevel
 import com.clairedoc.app.ui.NavRoutes
 import com.clairedoc.app.ui.theme.UrgencyRed
 import com.clairedoc.app.ui.theme.toColor
-import com.clairedoc.app.ui.theme.toContainerColor
 import com.clairedoc.app.ui.theme.toLabel
+import java.text.SimpleDateFormat
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeParseException
+import java.util.Date
+import java.util.Locale
 
 @Suppress("UNUSED_PARAMETER")
 @OptIn(ExperimentalMaterial3Api::class)
@@ -70,6 +92,9 @@ fun ResultScreen(
 ) {
     val result by viewModel.result.collectAsState()
     val isSpeaking by viewModel.isSpeaking.collectAsState()
+    val chatMessages by viewModel.chatMessages.collectAsState()
+    val streamingText by viewModel.streamingText.collectAsState()
+    val isChatLoading by viewModel.isChatLoading.collectAsState()
 
     Scaffold(
         topBar = {
@@ -96,9 +121,11 @@ fun ResultScreen(
             else -> ResultContent(
                 result = r,
                 paddingValues = paddingValues,
-                onScanAnother = {
-                    navController.popBackStack(NavRoutes.HOME, inclusive = false)
-                }
+                chatMessages = chatMessages,
+                streamingText = streamingText,
+                isChatLoading = isChatLoading,
+                onSendQuestion = viewModel::askFollowUp,
+                onDone = { navController.popBackStack(NavRoutes.HOME, inclusive = false) }
             )
         }
     }
@@ -108,7 +135,11 @@ fun ResultScreen(
 private fun ResultContent(
     result: DocumentResult,
     paddingValues: PaddingValues,
-    onScanAnother: () -> Unit
+    chatMessages: List<ChatMessage>,
+    streamingText: String,
+    isChatLoading: Boolean,
+    onSendQuestion: (String) -> Unit,
+    onDone: () -> Unit
 ) {
     LazyColumn(
         modifier = Modifier
@@ -137,9 +168,21 @@ private fun ResultContent(
             item { RisksCard(risks = result.risks) }
             item { Spacer(Modifier.height(12.dp)) }
         }
+
+        // Q&A section
+        item {
+            QASection(
+                chatMessages = chatMessages,
+                streamingText = streamingText,
+                isLoading = isChatLoading,
+                onSendQuestion = onSendQuestion
+            )
+        }
+        item { Spacer(Modifier.height(12.dp)) }
+
         item {
             OutlinedButton(
-                onClick = onScanAnother,
+                onClick = onDone,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp)
@@ -149,6 +192,210 @@ private fun ResultContent(
         }
     }
 }
+
+// ─────────────────────────────────────────────────────────────
+//  Q&A section
+// ─────────────────────────────────────────────────────────────
+
+@Composable
+private fun QASection(
+    chatMessages: List<ChatMessage>,
+    streamingText: String,
+    isLoading: Boolean,
+    onSendQuestion: (String) -> Unit
+) {
+    var expanded by rememberSaveable { mutableStateOf(chatMessages.isNotEmpty()) }
+    var inputText by remember { mutableStateOf("") }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+    ) {
+        Column {
+            // Header row — always visible
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { expanded = !expanded }
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Ask a follow-up question",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Icon(
+                    imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = if (expanded) "Collapse" else "Expand"
+                )
+            }
+
+            AnimatedVisibility(
+                visible = expanded,
+                enter = expandVertically(),
+                exit = shrinkVertically()
+            ) {
+                Column(modifier = Modifier.padding(horizontal = 12.dp)) {
+                    // Chat history bubbles
+                    chatMessages.forEach { msg ->
+                        ChatBubble(message = msg)
+                        Spacer(Modifier.height(4.dp))
+                    }
+
+                    // Streaming or loading bubble
+                    if (isLoading) {
+                        if (streamingText.isNotEmpty()) {
+                            StreamingBubble(text = streamingText)
+                        } else {
+                            LoadingBubble()
+                        }
+                        Spacer(Modifier.height(4.dp))
+                    }
+
+                    Spacer(Modifier.height(8.dp))
+
+                    // Input row
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp),
+                        verticalAlignment = Alignment.Bottom
+                    ) {
+                        OutlinedTextField(
+                            value = inputText,
+                            onValueChange = { inputText = it },
+                            placeholder = {
+                                Text(
+                                    "Ask anything about this document…",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            },
+                            modifier = Modifier.weight(1f),
+                            enabled = !isLoading,
+                            maxLines = 4,
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                            keyboardActions = KeyboardActions(onSend = {
+                                if (inputText.isNotBlank() && !isLoading) {
+                                    onSendQuestion(inputText.trim())
+                                    inputText = ""
+                                }
+                            })
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        IconButton(
+                            onClick = {
+                                if (inputText.isNotBlank() && !isLoading) {
+                                    onSendQuestion(inputText.trim())
+                                    inputText = ""
+                                }
+                            },
+                            enabled = !isLoading && inputText.isNotBlank()
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.Send,
+                                contentDescription = "Send",
+                                tint = if (!isLoading && inputText.isNotBlank())
+                                    MaterialTheme.colorScheme.primary
+                                else
+                                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChatBubble(message: ChatMessage) {
+    val isUser = message.role == Role.USER
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start
+    ) {
+        Column(
+            horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
+        ) {
+            Surface(
+                shape = RoundedCornerShape(
+                    topStart = 12.dp, topEnd = 12.dp,
+                    bottomStart = if (isUser) 12.dp else 4.dp,
+                    bottomEnd   = if (isUser) 4.dp  else 12.dp
+                ),
+                color = if (isUser)
+                    MaterialTheme.colorScheme.primary
+                else
+                    MaterialTheme.colorScheme.surfaceVariant,
+                modifier = Modifier.widthIn(max = 280.dp)
+            ) {
+                Text(
+                    text = message.content,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (isUser)
+                        MaterialTheme.colorScheme.onPrimary
+                    else
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Text(
+                text = formatTimestamp(message.timestamp),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 2.dp, start = 4.dp, end = 4.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun StreamingBubble(text: String) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
+        Surface(
+            shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp, bottomEnd = 12.dp, bottomStart = 4.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            modifier = Modifier.widthIn(max = 280.dp)
+        ) {
+            Text(
+                text = text,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun LoadingBubble() {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
+        Surface(
+            shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp, bottomEnd = 12.dp, bottomStart = 4.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                Text(
+                    text = "Thinking…",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Existing result card composables (unchanged)
+// ─────────────────────────────────────────────────────────────
 
 @Composable
 private fun UrgencyBanner(urgencyLevel: UrgencyLevel) {
@@ -395,6 +642,14 @@ private fun EmptyResultContent(paddingValues: PaddingValues) {
         )
     }
 }
+
+// ─────────────────────────────────────────────────────────────
+//  Utilities
+// ─────────────────────────────────────────────────────────────
+
+private val TIME_FMT = SimpleDateFormat("HH:mm", Locale.getDefault())
+
+private fun formatTimestamp(epochMs: Long): String = TIME_FMT.format(Date(epochMs))
 
 /** Returns true if [deadline] (YYYY-MM-DD) is today or within the next 7 days. */
 private fun isDeadlineWithin7Days(deadline: String): Boolean {

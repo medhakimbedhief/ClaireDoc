@@ -21,5 +21,6 @@ data class DocumentSession(
     val urgencyLevel: String,       // "RED" | "YELLOW" | "GREEN"
     val status: SessionStatus = SessionStatus.UNREAD,
     val userTitle: String? = null,
-    val isArchived: Boolean = false
+    val isArchived: Boolean = false,
+    val chatHistoryJson: String = "[]"   // JSON array of ChatMessage
 )
