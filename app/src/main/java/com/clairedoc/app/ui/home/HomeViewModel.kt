@@ -1,5 +1,8 @@
 package com.clairedoc.app.ui.home
 
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.clairedoc.app.data.db.DocumentSession
@@ -52,11 +55,15 @@ class HomeViewModel @Inject constructor(
     private val _uiState = MutableStateFlow<HomeUiState>(HomeUiState.Loading)
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
-    init {
-        viewModelScope.launch {
-            checkAndUpdateOverdueStatus()
-            observeSessions()
+    private val overdueObserver = object : DefaultLifecycleObserver {
+        override fun onStart(owner: LifecycleOwner) {
+            viewModelScope.launch { checkAndUpdateOverdueStatus() }
         }
+    }
+
+    init {
+        ProcessLifecycleOwner.get().lifecycle.addObserver(overdueObserver)
+        viewModelScope.launch { observeSessions() }
     }
 
     private suspend fun checkAndUpdateOverdueStatus() {
@@ -132,5 +139,10 @@ class HomeViewModel @Inject constructor(
     /** Wipes the Q&A chat history for [id] without deleting the session itself. */
     fun clearConversation(id: String) {
         viewModelScope.launch { repository.updateChatHistory(id, emptyList()) }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        ProcessLifecycleOwner.get().lifecycle.removeObserver(overdueObserver)
     }
 }

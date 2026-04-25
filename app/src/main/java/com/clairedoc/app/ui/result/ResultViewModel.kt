@@ -12,6 +12,7 @@ import com.clairedoc.app.data.db.DocumentSession
 import com.clairedoc.app.data.model.ChatMessage
 import com.clairedoc.app.data.model.DocumentResult
 import com.clairedoc.app.data.model.Role
+import com.clairedoc.app.data.model.SessionStatus
 import com.clairedoc.app.data.model.SourceType
 import com.clairedoc.app.data.repository.DocumentSessionRepository
 import com.clairedoc.app.engine.EngineState
@@ -68,6 +69,15 @@ class ResultViewModel @Inject constructor(
     // Holds the full session row so askFollowUp can access imageUri / sourceType
     private var currentSession: DocumentSession? = null
 
+    private val _sessionStatus = MutableStateFlow(SessionStatus.UNREAD)
+    val sessionStatus: StateFlow<SessionStatus> = _sessionStatus.asStateFlow()
+
+    private val _userTitle = MutableStateFlow<String?>(null)
+    val userTitle: StateFlow<String?> = _userTitle.asStateFlow()
+
+    private val _showConfetti = MutableStateFlow(false)
+    val showConfetti: StateFlow<Boolean> = _showConfetti.asStateFlow()
+
     // ── Init ──────────────────────────────────────────────────
     init {
         val encoded = savedStateHandle.get<String>("resultJson").orEmpty()
@@ -84,6 +94,8 @@ class ResultViewModel @Inject constructor(
                     if (session != null) {
                         currentSession = session
                         _chatMessages.value = parseChatHistory(session.chatHistoryJson)
+                        _sessionStatus.value = session.status
+                        _userTitle.value = session.userTitle
                     }
                 }
             }
@@ -195,6 +207,23 @@ class ResultViewModel @Inject constructor(
             persistHistory(session.id, capped)
         }
     }
+
+    // ── Status & title ────────────────────────────────────────
+
+    fun updateStatus(status: SessionStatus) {
+        if (sessionId.isBlank()) return
+        viewModelScope.launch {
+            repository.updateSessionStatus(sessionId, status)
+            if (status == SessionStatus.DONE) _showConfetti.value = true
+        }
+    }
+
+    fun renameSession(title: String) {
+        if (sessionId.isBlank() || title.isBlank()) return
+        viewModelScope.launch { repository.renameSession(sessionId, title) }
+    }
+
+    fun dismissConfetti() { _showConfetti.value = false }
 
     // ── Private helpers ───────────────────────────────────────
 

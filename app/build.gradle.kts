@@ -82,6 +82,7 @@ dependencies {
     implementation(libs.compose.navigation)
     implementation(libs.compose.lifecycle.viewmodel)
     implementation(libs.compose.lifecycle.runtime)
+    implementation(libs.lifecycle.process)
     debugImplementation(libs.compose.ui.tooling)
 
     implementation(libs.androidx.core.ktx)

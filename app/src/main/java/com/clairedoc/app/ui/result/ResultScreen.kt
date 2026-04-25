@@ -1,10 +1,16 @@
 package com.clairedoc.app.ui.result
 
 import android.content.Intent
+import android.provider.AlarmClock
 import android.provider.CalendarContract
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -27,6 +33,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.MicOff
@@ -34,10 +41,12 @@ import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -51,6 +60,7 @@ import androidx.compose.material3.SuggestionChipDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -59,10 +69,14 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
@@ -70,6 +84,7 @@ import com.clairedoc.app.data.model.ActionItem
 import com.clairedoc.app.data.model.ChatMessage
 import com.clairedoc.app.data.model.DocumentResult
 import com.clairedoc.app.data.model.Role
+import com.clairedoc.app.data.model.SessionStatus
 import com.clairedoc.app.data.model.UrgencyLevel
 import com.clairedoc.app.ui.NavRoutes
 import com.clairedoc.app.ui.theme.UrgencyRed
@@ -81,6 +96,8 @@ import java.time.ZoneId
 import java.time.format.DateTimeParseException
 import java.util.Date
 import java.util.Locale
+import kotlin.math.sin
+import kotlin.random.Random
 
 @Suppress("UNUSED_PARAMETER")
 @OptIn(ExperimentalMaterial3Api::class)
@@ -95,38 +112,90 @@ fun ResultScreen(
     val chatMessages by viewModel.chatMessages.collectAsState()
     val streamingText by viewModel.streamingText.collectAsState()
     val isChatLoading by viewModel.isChatLoading.collectAsState()
+    val sessionStatus by viewModel.sessionStatus.collectAsState()
+    val userTitle by viewModel.userTitle.collectAsState()
+    val showConfetti by viewModel.showConfetti.collectAsState()
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Document") },
-                navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back"
-                        )
+    var isEditingTitle by remember { mutableStateOf(false) }
+    var editTitleText by remember(userTitle) { mutableStateOf(userTitle ?: "") }
+
+    val context = LocalContext.current
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = {
+                        if (isEditingTitle) {
+                            OutlinedTextField(
+                                value = editTitleText,
+                                onValueChange = { editTitleText = it },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                                keyboardActions = KeyboardActions(onDone = {
+                                    if (editTitleText.isNotBlank()) {
+                                        viewModel.renameSession(editTitleText.trim())
+                                    }
+                                    isEditingTitle = false
+                                }),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        } else {
+                            Text(
+                                text = userTitle ?: "Document",
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = { navController.popBackStack() }) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back"
+                            )
+                        }
+                    },
+                    actions = {
+                        if (!isEditingTitle) {
+                            IconButton(onClick = {
+                                editTitleText = userTitle ?: ""
+                                isEditingTitle = true
+                            }) {
+                                Icon(
+                                    imageVector = Icons.Default.Edit,
+                                    contentDescription = "Rename"
+                                )
+                            }
+                        }
                     }
+                )
+            },
+            floatingActionButton = {
+                if (result != null) {
+                    ListenFAB(isSpeaking = isSpeaking, onClick = viewModel::toggleTTS)
                 }
-            )
-        },
-        floatingActionButton = {
-            if (result != null) {
-                ListenFAB(isSpeaking = isSpeaking, onClick = viewModel::toggleTTS)
+            }
+        ) { paddingValues ->
+            when (val r = result) {
+                null -> EmptyResultContent(paddingValues)
+                else -> ResultContent(
+                    result = r,
+                    paddingValues = paddingValues,
+                    chatMessages = chatMessages,
+                    streamingText = streamingText,
+                    isChatLoading = isChatLoading,
+                    sessionStatus = sessionStatus,
+                    onSendQuestion = viewModel::askFollowUp,
+                    onUpdateStatus = viewModel::updateStatus,
+                    onDone = { navController.popBackStack(NavRoutes.HOME, inclusive = false) },
+                    context = context
+                )
             }
         }
-    ) { paddingValues ->
-        when (val r = result) {
-            null -> EmptyResultContent(paddingValues)
-            else -> ResultContent(
-                result = r,
-                paddingValues = paddingValues,
-                chatMessages = chatMessages,
-                streamingText = streamingText,
-                isChatLoading = isChatLoading,
-                onSendQuestion = viewModel::askFollowUp,
-                onDone = { navController.popBackStack(NavRoutes.HOME, inclusive = false) }
-            )
+
+        if (showConfetti) {
+            ConfettiOverlay(onEnd = viewModel::dismissConfetti)
         }
     }
 }
@@ -138,8 +207,11 @@ private fun ResultContent(
     chatMessages: List<ChatMessage>,
     streamingText: String,
     isChatLoading: Boolean,
+    sessionStatus: SessionStatus,
     onSendQuestion: (String) -> Unit,
-    onDone: () -> Unit
+    onUpdateStatus: (SessionStatus) -> Unit,
+    onDone: () -> Unit,
+    context: android.content.Context
 ) {
     LazyColumn(
         modifier = Modifier
@@ -148,6 +220,19 @@ private fun ResultContent(
         contentPadding = PaddingValues(bottom = 88.dp)  // room for FAB
     ) {
         item { UrgencyBanner(urgencyLevel = result.urgencyLevel) }
+        item { Spacer(Modifier.height(12.dp)) }
+        item {
+            StatusSection(status = sessionStatus, onStepTapped = onUpdateStatus)
+        }
+        item { Spacer(Modifier.height(8.dp)) }
+        item {
+            QuickActionButtons(
+                status = sessionStatus,
+                onMarkDone = { onUpdateStatus(SessionStatus.DONE) },
+                onHandlingIt = { onUpdateStatus(SessionStatus.IN_PROGRESS) },
+                onRemindMe = { launchAlarmIntent(context) }
+            )
+        }
         item { Spacer(Modifier.height(16.dp)) }
         item {
             Row(
@@ -189,6 +274,173 @@ private fun ResultContent(
             ) {
                 Text("Done")
             }
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Status stepper & quick actions
+// ─────────────────────────────────────────────────────────────
+
+@Composable
+private fun StatusSection(status: SessionStatus, onStepTapped: (SessionStatus) -> Unit) {
+    val steps = listOf(
+        SessionStatus.UNREAD to "Unread",
+        SessionStatus.IN_PROGRESS to "In Progress",
+        SessionStatus.DONE to "Done"
+    )
+    val linearOrder = mapOf(
+        SessionStatus.UNREAD to 0,
+        SessionStatus.IN_PROGRESS to 1,
+        SessionStatus.DONE to 2
+    )
+    val currentOrder = linearOrder[status] ?: -1  // OVERDUE → -1, no step highlighted
+
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+        if (status == SessionStatus.OVERDUE) {
+            Surface(
+                color = Color(0xFFD32F2F),
+                shape = RoundedCornerShape(4.dp),
+                modifier = Modifier.padding(bottom = 8.dp)
+            ) {
+                Text(
+                    text = "OVERDUE",
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                )
+            }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            steps.forEachIndexed { index, (stepStatus, label) ->
+                val stepOrder = linearOrder[stepStatus]!!
+                val isActive = status == stepStatus
+                val isPast = currentOrder > stepOrder && currentOrder >= 0
+
+                val bg = when {
+                    isActive -> MaterialTheme.colorScheme.primary
+                    isPast   -> MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                    else     -> Color.Transparent
+                }
+                val textColor = when {
+                    isActive -> MaterialTheme.colorScheme.onPrimary
+                    isPast   -> MaterialTheme.colorScheme.primary
+                    else     -> MaterialTheme.colorScheme.outline
+                }
+
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(50))
+                        .background(bg)
+                        .then(
+                            if (!isActive && !isPast)
+                                Modifier.border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(50))
+                            else Modifier
+                        )
+                        .clickable { onStepTapped(stepStatus) }
+                        .padding(vertical = 6.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = textColor,
+                        fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1
+                    )
+                }
+
+                if (index < steps.lastIndex) {
+                    val connectorColor = if (isPast || isActive)
+                        MaterialTheme.colorScheme.primary
+                    else
+                        MaterialTheme.colorScheme.outlineVariant
+                    Box(
+                        modifier = Modifier
+                            .weight(0.25f)
+                            .height(2.dp)
+                            .background(connectorColor)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun QuickActionButtons(
+    status: SessionStatus,
+    onMarkDone: () -> Unit,
+    onHandlingIt: () -> Unit,
+    onRemindMe: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Button(
+            onClick = onMarkDone,
+            enabled = status != SessionStatus.DONE,
+            modifier = Modifier.weight(1f)
+        ) {
+            Text("Done", maxLines = 1, style = MaterialTheme.typography.labelSmall)
+        }
+        FilledTonalButton(
+            onClick = onHandlingIt,
+            enabled = status != SessionStatus.IN_PROGRESS,
+            modifier = Modifier.weight(1f)
+        ) {
+            Text("Handling it", maxLines = 1, style = MaterialTheme.typography.labelSmall)
+        }
+        FilledTonalButton(
+            onClick = onRemindMe,
+            modifier = Modifier.weight(1f)
+        ) {
+            Text("Remind me", maxLines = 1, style = MaterialTheme.typography.labelSmall)
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Confetti overlay
+// ─────────────────────────────────────────────────────────────
+
+@Composable
+private fun ConfettiOverlay(onEnd: () -> Unit) {
+    val progress = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        progress.animateTo(1f, animationSpec = tween(durationMillis = 3000))
+        onEnd()
+    }
+    val colors = remember {
+        listOf(
+            Color(0xFFE91E63), Color(0xFF2196F3), Color(0xFF4CAF50),
+            Color(0xFFFF9800), Color(0xFF9C27B0), Color(0xFF00BCD4)
+        )
+    }
+    val particles = remember {
+        List(60) { Triple(Random.nextFloat(), Random.nextFloat() * 0.3f, Random.nextFloat()) }
+    }
+    Canvas(modifier = Modifier.fillMaxSize()) {
+        val p = progress.value
+        particles.forEachIndexed { i, (xFrac, yStart, phase) ->
+            val alpha = if (p > 0.7f) (1f - (p - 0.7f) / 0.3f).coerceIn(0f, 1f) else 1f
+            val x = xFrac * size.width + sin((p * 3f + phase) * Math.PI.toFloat()) * 24f
+            val y = yStart * size.height + p * size.height * 0.8f
+            drawCircle(
+                color = colors[i % colors.size].copy(alpha = alpha),
+                radius = 6f * (1f - p * 0.3f),
+                center = Offset(x, y)
+            )
         }
     }
 }
@@ -565,6 +817,22 @@ private fun addToCalendar(context: android.content.Context, title: String, deadl
     }
     if (intent.resolveActivity(context.packageManager) != null) {
         context.startActivity(intent)
+    }
+}
+
+private fun launchAlarmIntent(context: android.content.Context) {
+    val cal = java.util.Calendar.getInstance().apply { add(java.util.Calendar.HOUR_OF_DAY, 1) }
+    val intent = Intent(AlarmClock.ACTION_SET_ALARM).apply {
+        putExtra(AlarmClock.EXTRA_MESSAGE, "ClaireDoc reminder")
+        putExtra(AlarmClock.EXTRA_HOUR, cal.get(java.util.Calendar.HOUR_OF_DAY))
+        putExtra(AlarmClock.EXTRA_MINUTES, cal.get(java.util.Calendar.MINUTE))
+        putExtra(AlarmClock.EXTRA_SKIP_UI, false)
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+    runCatching {
+        if (intent.resolveActivity(context.packageManager) != null) {
+            context.startActivity(intent)
+        }
     }
 }
 
