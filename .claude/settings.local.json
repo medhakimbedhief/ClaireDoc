@@ -2,7 +2,12 @@
   "permissions": {
     "allow": [
       "WebFetch(domain:github.com)",
-      "Bash(./gradlew assembleDebug)"
+      "Bash(./gradlew assembleDebug)",
+      "Bash(export JAVA_HOME=\"/c/Program Files/Android/Android Studio/jbr\")",
+      "Bash(export PATH=\"$JAVA_HOME/bin:$PATH\")",
+      "Bash(export JAVA_OPTS=\"-Xmx4096m -Dfile.encoding=UTF-8\")",
+      "Bash(export GRADLE_OPTS=\"-Dorg.gradle.daemon=false\")",
+      "Bash(./gradlew --no-daemon compileDebugKotlin)"
     ]
   }
 }

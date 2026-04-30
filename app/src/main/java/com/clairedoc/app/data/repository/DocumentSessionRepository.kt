@@ -27,9 +27,10 @@ class DocumentSessionRepository @Inject constructor(
     suspend fun saveSession(
         result: DocumentResult,
         imageUri: String,
-        sourceType: SourceType
+        sourceType: SourceType,
+        pageCount: Int? = null
     ): String {
-        val session = result.toDocumentSession(imageUri, sourceType, gson)
+        val session = result.toDocumentSession(imageUri, sourceType, gson, pageCount)
         dao.insert(session)
         return session.id
     }

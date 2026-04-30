@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DocumentScanner
 import androidx.compose.material.icons.filled.DriveFileRenameOutline
+import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.TaskAlt
 import androidx.compose.material3.AlertDialog
@@ -64,6 +65,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.clairedoc.app.data.model.SessionStatus
+import com.clairedoc.app.data.model.SourceType
 import com.clairedoc.app.data.model.UrgencyLevel
 import com.clairedoc.app.ui.NavRoutes
 import kotlinx.coroutines.launch
@@ -354,6 +356,23 @@ private fun DocumentCard(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+                if (item.session.sourceType == SourceType.PDF) {
+                    Spacer(Modifier.height(2.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.PictureAsPdf,
+                            contentDescription = null,
+                            modifier = Modifier.size(12.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            text = item.session.pageCount?.let { "PDF · $it pages" } ?: "PDF",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
                 item.firstActionDescription?.let { desc ->
                     Spacer(Modifier.height(2.dp))
                     Text(

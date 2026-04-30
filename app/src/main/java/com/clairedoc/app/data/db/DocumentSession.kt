@@ -22,5 +22,6 @@ data class DocumentSession(
     val status: SessionStatus = SessionStatus.UNREAD,
     val userTitle: String? = null,
     val isArchived: Boolean = false,
-    val chatHistoryJson: String = "[]"   // JSON array of ChatMessage
+    val chatHistoryJson: String = "[]",  // JSON array of ChatMessage
+    val pageCount: Int? = null
 )

@@ -7,13 +7,16 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DocumentScanner
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Settings
@@ -37,7 +40,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
@@ -82,12 +87,11 @@ fun ScanScreen(
     }
 
     // ── PDF file picker (Storage Access Framework) ─────────────
-    // Opens the system file picker filtered to PDFs only.
     // The returned URI is permanent-read granted by SAF — no MANAGE_EXTERNAL_STORAGE needed.
     val pdfLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri ->
-        if (uri != null) viewModel.analyzePdf(uri)
+        if (uri != null) viewModel.onPdfSelected(uri)
         else viewModel.clearError()
     }
 
@@ -136,7 +140,7 @@ fun ScanScreen(
                 .padding(paddingValues),
             contentAlignment = Alignment.Center
         ) {
-            when (state) {
+            when (val s = state) {
                 is ScanUiState.Analyzing -> {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
@@ -145,21 +149,88 @@ fun ScanScreen(
                         CircularProgressIndicator()
                         Spacer(modifier = Modifier.height(24.dp))
                         Text(
-                            text = "Analysing document…",
+                            text = s.step,
                             style = MaterialTheme.typography.titleMedium
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "This may take 20–60 seconds.",
+                            text = if (s.step == "Rendering PDF...")
+                                "Multi-page documents may take 30–60 seconds."
+                            else
+                                "This may take 20–60 seconds.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
 
+                is ScanUiState.PdfSelected -> {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 32.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        // Selected file row with clear button
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.PictureAsPdf,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    text = s.fileName,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            IconButton(onClick = { viewModel.clearPdfSelection() }) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Clear selection"
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = "${"%.1f".format(s.fileSizeMb)} MB · ${s.pageCount} pages detected",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        if (s.pageCount > 1) {
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                text = "Multi-page documents may take 30–60 seconds to analyze.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                        Spacer(Modifier.height(24.dp))
+                        Button(
+                            onClick = { viewModel.startPdfAnalysis() },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Analyze Document")
+                        }
+                    }
+                }
+
                 else -> {
-                    val buttonsEnabled = state !is ScanUiState.Scanning &&
-                            state !is ScanUiState.Analyzing
+                    val buttonsEnabled = s !is ScanUiState.Scanning
 
                     Column(
                         modifier = Modifier

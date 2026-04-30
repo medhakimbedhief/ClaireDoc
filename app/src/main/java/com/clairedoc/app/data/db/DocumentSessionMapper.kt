@@ -12,7 +12,8 @@ import java.util.UUID
 fun DocumentResult.toDocumentSession(
     imageUri: String,
     sourceType: SourceType,
-    gson: Gson
+    gson: Gson,
+    pageCount: Int? = null
 ): DocumentSession = DocumentSession(
     id = UUID.randomUUID().toString(),
     createdAt = System.currentTimeMillis(),
@@ -24,7 +25,8 @@ fun DocumentResult.toDocumentSession(
     actionsJson = gson.toJson(actions),
     risksJson = gson.toJson(risks),
     urgencyLevel = urgencyLevel.name,
-    status = SessionStatus.UNREAD
+    status = SessionStatus.UNREAD,
+    pageCount = pageCount
 )
 
 fun DocumentSession.toDocumentResult(gson: Gson): DocumentResult {
