@@ -99,12 +99,17 @@ import java.util.Locale
 import kotlin.math.sin
 import kotlin.random.Random
 import android.net.Uri
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import com.clairedoc.app.actions.EmailDraft
+import com.clairedoc.app.data.model.GlossaryTerm
 
 @Suppress("UNUSED_PARAMETER")
 @OptIn(ExperimentalMaterial3Api::class)
@@ -199,6 +204,7 @@ fun ResultScreen(
                     sessionStatus = sessionStatus,
                     onSendQuestion = viewModel::askFollowUp,
                     onUpdateStatus = viewModel::updateStatus,
+                    onSpeakTerm = viewModel::speakTerm,
                     onDone = { navController.popBackStack(NavRoutes.HOME, inclusive = false) },
                     context = context,
                     emailAddresses = emailAddresses,
@@ -230,6 +236,7 @@ private fun ResultContent(
     sessionStatus: SessionStatus,
     onSendQuestion: (String) -> Unit,
     onUpdateStatus: (SessionStatus) -> Unit,
+    onSpeakTerm: (GlossaryTerm) -> Unit,
     onDone: () -> Unit,
     context: android.content.Context,
     emailAddresses: List<String>,
@@ -241,6 +248,7 @@ private fun ResultContent(
     onUpdateDraftBody: (String) -> Unit,
     onResetDraft: () -> Unit
 ) {
+    var selectedTerm by remember { mutableStateOf<GlossaryTerm?>(null) }
     val clipboardManager = LocalClipboardManager.current
     LazyColumn(
         modifier = Modifier
@@ -274,6 +282,16 @@ private fun ResultContent(
         item { Spacer(Modifier.height(16.dp)) }
         item { SummaryCard(summary = result.summary) }
         item { Spacer(Modifier.height(12.dp)) }
+        val glossaryTerms = result.glossaryTerms.orEmpty()
+        if (glossaryTerms.isNotEmpty()) {
+            item {
+                GlossaryChipsRow(
+                    terms = glossaryTerms,
+                    onTermTapped = { selectedTerm = it }
+                )
+            }
+            item { Spacer(Modifier.height(12.dp)) }
+        }
         if (result.actions.isNotEmpty()) {
             item { ActionsCard(actions = result.actions) }
             item { Spacer(Modifier.height(12.dp)) }
@@ -334,6 +352,16 @@ private fun ResultContent(
                 Text("Done")
             }
         }
+    }
+
+    // TermExplanationBottomSheet is shown outside the LazyColumn so it
+    // overlays the entire screen correctly and isn't clipped by the list.
+    selectedTerm?.let { term ->
+        TermExplanationBottomSheet(
+            term = term,
+            onListen = { onSpeakTerm(term) },
+            onDismiss = { selectedTerm = null }
+        )
     }
 }
 
@@ -967,6 +995,100 @@ private fun EmptyResultContent(paddingValues: PaddingValues) {
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Glossary
+// ─────────────────────────────────────────────────────────────
+
+@Composable
+private fun GlossaryChipsRow(
+    terms: List<GlossaryTerm>,
+    onTermTapped: (GlossaryTerm) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+    ) {
+        Text(
+            text = "Tap to understand",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(bottom = 6.dp)
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            terms.forEach { term ->
+                SuggestionChip(
+                    onClick = { onTermTapped(term) },
+                    label = { Text(term.term) }
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TermExplanationBottomSheet(
+    term: GlossaryTerm,
+    onListen: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 32.dp)
+        ) {
+            Text(
+                text = term.term,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(Modifier.height(12.dp))
+            Text(
+                text = term.plainExplanation,
+                style = MaterialTheme.typography.bodyLarge
+            )
+            Spacer(Modifier.height(24.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                FilledTonalButton(
+                    onClick = onListen,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.RecordVoiceOver,
+                        contentDescription = null,
+                        modifier = Modifier
+                            .size(18.dp)
+                            .padding(end = 4.dp)
+                    )
+                    Text("Listen")
+                }
+                Button(
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Got it")
+                }
+            }
+        }
     }
 }
 

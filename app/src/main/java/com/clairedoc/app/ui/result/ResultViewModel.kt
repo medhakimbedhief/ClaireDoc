@@ -11,6 +11,7 @@ import androidx.lifecycle.viewModelScope
 import com.clairedoc.app.data.db.DocumentSession
 import com.clairedoc.app.data.model.ChatMessage
 import com.clairedoc.app.data.model.DocumentResult
+import com.clairedoc.app.data.model.GlossaryTerm
 import com.clairedoc.app.data.model.Role
 import com.clairedoc.app.data.model.SessionStatus
 import com.clairedoc.app.data.model.SourceType
@@ -119,6 +120,11 @@ class ResultViewModel @Inject constructor(
         // to TTSManager.speak(DocumentResult). The lambda runs on the TTS thread
         // when the last utterance finishes naturally (stop() handles early cancel).
         ttsManager.speak(result) { _isSpeaking.value = false }
+    }
+
+    // ── Glossary TTS ──────────────────────────────────────────
+    fun speakTerm(term: GlossaryTerm) {
+        ttsManager.speakTerm(term, _result.value?.detectedLanguage)
     }
 
     // ── Q&A ───────────────────────────────────────────────────
