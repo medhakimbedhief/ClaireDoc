@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DocumentScanner
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -141,6 +142,51 @@ fun ScanScreen(
             contentAlignment = Alignment.Center
         ) {
             when (val s = state) {
+                is ScanUiState.ImageQualityWarning -> {
+                    val (message, iconTint) = when (s.warning) {
+                        QualityWarning.TOO_SMALL ->
+                            "Image may be too small for accurate analysis.\nRetake for better results." to
+                            androidx.compose.ui.graphics.Color(0xFFF57C00)
+                        QualityWarning.TOO_DARK ->
+                            "Image appears dark.\nTry better lighting." to
+                            androidx.compose.ui.graphics.Color(0xFFE65100)
+                    }
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 32.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Warning,
+                            contentDescription = null,
+                            modifier = Modifier.size(56.dp),
+                            tint = iconTint
+                        )
+                        Spacer(Modifier.height(16.dp))
+                        Text(
+                            text = message,
+                            style = MaterialTheme.typography.bodyLarge,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(Modifier.height(32.dp))
+                        Button(
+                            onClick = { viewModel.continueAnalysis() },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Continue anyway")
+                        }
+                        Spacer(Modifier.height(12.dp))
+                        OutlinedButton(
+                            onClick = { viewModel.clearError() },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Retake")
+                        }
+                    }
+                }
+
                 is ScanUiState.Analyzing -> {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,

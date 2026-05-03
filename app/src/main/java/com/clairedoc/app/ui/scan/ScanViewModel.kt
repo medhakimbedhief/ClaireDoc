@@ -2,6 +2,7 @@ package com.clairedoc.app.ui.scan
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.pdf.PdfRenderer
@@ -24,6 +25,8 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import javax.inject.Inject
 
+enum class QualityWarning { TOO_SMALL, TOO_DARK }
+
 sealed class ScanUiState {
     object Idle : ScanUiState()
     object Scanning : ScanUiState()
@@ -32,6 +35,11 @@ sealed class ScanUiState {
         val fileName: String,
         val fileSizeMb: Float,
         val pageCount: Int
+    ) : ScanUiState()
+    data class ImageQualityWarning(
+        val uri: Uri,
+        val warning: QualityWarning,
+        val sourceType: SourceType
     ) : ScanUiState()
     data class Analyzing(val step: String = "Analyzing document...") : ScanUiState()
     data class Success(val resultJson: String, val sessionId: String) : ScanUiState()
@@ -59,13 +67,27 @@ class ScanViewModel @Inject constructor(
 
     /** Camera scan or ML Kit gallery import. */
     fun analyzeDocument(imageUri: Uri) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val warning = checkImageQuality(imageUri)
+            if (warning != null) {
+                _uiState.value = ScanUiState.ImageQualityWarning(imageUri, warning, pendingSourceType)
+            } else {
+                _uiState.value = ScanUiState.Analyzing()
+                dispatchAnalysis(
+                    analysisUri = imageUri,
+                    sourceUri = imageUri.toString(),
+                    sourceType = pendingSourceType
+                )
+            }
+        }
+    }
+
+    /** User chose to proceed despite a quality warning. */
+    fun continueAnalysis() {
+        val s = _uiState.value as? ScanUiState.ImageQualityWarning ?: return
         _uiState.value = ScanUiState.Analyzing()
         viewModelScope.launch(Dispatchers.IO) {
-            dispatchAnalysis(
-                analysisUri = imageUri,
-                sourceUri = imageUri.toString(),
-                sourceType = pendingSourceType
-            )
+            dispatchAnalysis(s.uri, s.uri.toString(), s.sourceType)
         }
     }
 
@@ -269,6 +291,51 @@ class ScanViewModel @Inject constructor(
                 }
             }.getOrNull()
         }
+
+    /**
+     * Decodes image bounds and a downsampled bitmap to check resolution and brightness.
+     * Returns [QualityWarning.TOO_SMALL] if under 800×600, [QualityWarning.TOO_DARK] if
+     * average luminance < 50/255, or null if the image passes both checks.
+     * Bitmap is recycled before returning. All work on [Dispatchers.IO].
+     */
+    private suspend fun checkImageQuality(uri: Uri): QualityWarning? = withContext(Dispatchers.IO) {
+        runCatching {
+            // Step 1: decode bounds only (fast, no full pixel read)
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            context.contentResolver.openInputStream(uri)?.use {
+                BitmapFactory.decodeStream(it, null, bounds)
+            }
+            val w = bounds.outWidth
+            val h = bounds.outHeight
+            if (w > 0 && h > 0 && (w < 800 || h < 600)) {
+                return@runCatching QualityWarning.TOO_SMALL
+            }
+
+            // Step 2: decode at 1/4 scale to check average brightness
+            val sampleOpts = BitmapFactory.Options().apply { inSampleSize = 4 }
+            val bmp = context.contentResolver.openInputStream(uri)?.use { stream ->
+                BitmapFactory.decodeStream(stream, null, sampleOpts)
+            } ?: return@runCatching null
+            val brightness = averageBrightness(bmp)
+            bmp.recycle()
+            if (brightness < 50f) QualityWarning.TOO_DARK else null
+        }.getOrNull()
+    }
+
+    /** Computes perceptual luminance (0–255) by sampling every 4th pixel. */
+    private fun averageBrightness(bmp: Bitmap): Float {
+        var total = 0L
+        var count = 0
+        val step = 4
+        for (y in 0 until bmp.height step step) {
+            for (x in 0 until bmp.width step step) {
+                val p = bmp.getPixel(x, y)
+                total += (0.299 * Color.red(p) + 0.587 * Color.green(p) + 0.114 * Color.blue(p)).toLong()
+                count++
+            }
+        }
+        return if (count > 0) total.toFloat() / count else 255f
+    }
 
     private fun classifyPdfError(e: Throwable): String = when {
         e is SecurityException ||

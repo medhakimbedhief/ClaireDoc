@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.MicOff
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AssistChip
@@ -45,6 +46,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FloatingActionButton
@@ -109,6 +112,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import com.clairedoc.app.actions.EmailDraft
+import com.clairedoc.app.data.model.Confidence
 import com.clairedoc.app.data.model.GlossaryTerm
 
 @Suppress("UNUSED_PARAMETER")
@@ -134,6 +138,7 @@ fun ResultScreen(
 
     var isEditingTitle by remember { mutableStateOf(false) }
     var editTitleText by remember(userTitle) { mutableStateOf(userTitle ?: "") }
+    var showOverflowMenu by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
 
@@ -183,6 +188,27 @@ fun ResultScreen(
                                     contentDescription = "Rename"
                                 )
                             }
+                            Box {
+                                IconButton(onClick = { showOverflowMenu = true }) {
+                                    Icon(
+                                        imageVector = Icons.Default.MoreVert,
+                                        contentDescription = "More options"
+                                    )
+                                }
+                                DropdownMenu(
+                                    expanded = showOverflowMenu,
+                                    onDismissRequest = { showOverflowMenu = false }
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text("Retake document") },
+                                        onClick = {
+                                            showOverflowMenu = false
+                                            viewModel.deleteSessionIfUnread()
+                                            navController.popBackStack()
+                                        }
+                                    )
+                                }
+                            }
                         }
                     }
                 )
@@ -205,6 +231,10 @@ fun ResultScreen(
                     onSendQuestion = viewModel::askFollowUp,
                     onUpdateStatus = viewModel::updateStatus,
                     onSpeakTerm = viewModel::speakTerm,
+                    onRetake = {
+                        viewModel.deleteSessionIfUnread()
+                        navController.popBackStack()
+                    },
                     onDone = { navController.popBackStack(NavRoutes.HOME, inclusive = false) },
                     context = context,
                     emailAddresses = emailAddresses,
@@ -237,6 +267,7 @@ private fun ResultContent(
     onSendQuestion: (String) -> Unit,
     onUpdateStatus: (SessionStatus) -> Unit,
     onSpeakTerm: (GlossaryTerm) -> Unit,
+    onRetake: () -> Unit,
     onDone: () -> Unit,
     context: android.content.Context,
     emailAddresses: List<String>,
@@ -257,6 +288,10 @@ private fun ResultContent(
         contentPadding = PaddingValues(bottom = 88.dp)  // room for FAB
     ) {
         item { UrgencyBanner(urgencyLevel = result.urgencyLevel) }
+        val confidence = result.confidence
+        if (confidence != null && confidence != Confidence.HIGH) {
+            item { ConfidenceBanner(confidence = confidence, onRetake = onRetake) }
+        }
         item { Spacer(Modifier.height(12.dp)) }
         item {
             StatusSection(status = sessionStatus, onStepTapped = onUpdateStatus)
@@ -762,6 +797,41 @@ private fun UrgencyBanner(urgencyLevel: UrgencyLevel) {
                 color = Color.White
             )
         }
+    }
+}
+
+@Composable
+private fun ConfidenceBanner(confidence: Confidence, onRetake: () -> Unit) {
+    when (confidence) {
+        Confidence.MEDIUM -> {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = Color(0xFFFFF8E1)
+            ) {
+                Text(
+                    text = "ℹ️ Some parts of this document were unclear. Review the results carefully.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF5D4037),
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
+                )
+            }
+        }
+        Confidence.LOW -> {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onRetake() },
+                color = Color(0xFFFBE9E7)
+            ) {
+                Text(
+                    text = "⚠️ Low image quality detected. Results may be inaccurate. Tap to retake.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFFBF360C),
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
+                )
+            }
+        }
+        else -> Unit
     }
 }
 

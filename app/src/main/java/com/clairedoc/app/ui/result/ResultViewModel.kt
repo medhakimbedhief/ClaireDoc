@@ -218,6 +218,17 @@ class ResultViewModel @Inject constructor(
 
     fun dismissConfetti() { _showConfetti.value = false }
 
+    /**
+     * Deletes the current session from Room if its status is still UNREAD.
+     * Fire-and-forget: navigation should happen immediately after calling this;
+     * the Room delete runs asynchronously in the background.
+     */
+    fun deleteSessionIfUnread() {
+        if (sessionId.isBlank()) return
+        if (currentSession?.status != SessionStatus.UNREAD) return
+        viewModelScope.launch { repository.deleteSession(sessionId) }
+    }
+
     // ── Private helpers ───────────────────────────────────────
 
     /**
