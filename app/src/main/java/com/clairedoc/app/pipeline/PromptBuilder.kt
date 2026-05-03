@@ -38,6 +38,7 @@ class PromptBuilder @Inject constructor() {
         append(analysisJson)
         append("\n\n")
         append("The user has a follow-up question about this document.\n")
+        append("The user may also be referring to specific visual elements in the document.\n")
         append("Answer in plain, simple language — like you are explaining to a 12-year-old.\n")
         append("Do NOT output JSON. Do NOT start with the analysis again.\n")
         append("Give a short, direct answer in 1 to 4 sentences.")
@@ -55,21 +56,36 @@ Respond ONLY with a valid JSON object. No explanation, no markdown fences, no pr
 
 Use this exact schema:
 {
-  "documentType": "BILL|CONTRACT|LEGAL_NOTICE|MEDICAL|OTHER",
-  "summary": ["plain bullet 1", "plain bullet 2", "plain bullet 3"],
+  "documentType": "BILL|CONTRACT|LEGAL_NOTICE|MEDICAL|TAX|INSURANCE|BANK|VISA_IMMIGRATION|GOVERNMENT_NOTICE|RENTAL|OTHER",
+  "sender": {"name": "sender name or null", "department": "department or null"},
+  "detectedLanguage": "ISO 639-1 code, e.g. en",
+  "confidence": "HIGH|MEDIUM|LOW",
+  "summary": ["plain bullet 1", "plain bullet 2"],
   "actions": [
     {"description": "action text", "deadline": "YYYY-MM-DD or null", "urgency": "RED|YELLOW|GREEN"}
   ],
   "risks": ["risk description"],
-  "urgencyLevel": "RED|YELLOW|GREEN"
+  "urgencyLevel": "RED|YELLOW|GREEN",
+  "contacts": [
+    {"type": "EMAIL|PHONE|ADDRESS|WEBSITE", "value": "contact value", "label": "e.g. Customer Service"}
+  ],
+  "glossaryTerms": [
+    {"term": "legal or technical term", "plainExplanation": "simple plain-language explanation"}
+  ]
 }
 
 Rules:
 - Use plain language a 12-year-old can understand
 - Extract all amounts (€, $, £) and dates precisely
+- summary: 2 to 5 bullets covering main purpose, key amounts and key dates
 - deadline field: ISO date string if found, null if not
 - urgencyLevel RED = legal deadline / eviction / visa risk
 - urgencyLevel YELLOW = action needed, no immediate deadline
-- urgencyLevel GREEN = informational only"""
+- urgencyLevel GREEN = informational only
+- confidence HIGH = document is clear and fully readable; MEDIUM = some parts unclear; LOW = poor image quality or document unrecognised
+- glossaryTerms: include every legal, medical, financial or administrative term found in the document
+- contacts: include every email, phone number, postal address and website found
+- sender: name of the organisation or person who sent the document; department if visible
+- detectedLanguage: ISO 639-1 code of the document's written language"""
     }
 }

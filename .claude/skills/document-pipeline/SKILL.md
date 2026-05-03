@@ -26,23 +26,69 @@ You are a document assistant helping people understand official documents.
 Analyze the provided document image.
 Respond ONLY with a valid JSON object. No explanation, no markdown fences, no preamble.
 Use this exact schema:
+```json
 {
-"documentType": "BILL|CONTRACT|LEGAL_NOTICE|MEDICAL|OTHER",
-"summary": ["plain bullet 1", "plain bullet 2", "plain bullet 3"],
-"actions": [
-{"description": "action text", "deadline": "YYYY-MM-DD or null", "urgency": "RED|YELLOW|GREEN"}
-],
-"risks": ["risk description"],
-"urgencyLevel": "RED|YELLOW|GREEN"
+  "documentType": "BILL|CONTRACT|LEGAL_NOTICE|MEDICAL|TAX|INSURANCE|BANK|VISA_IMMIGRATION|GOVERNMENT_NOTICE|RENTAL|OTHER",
+  "sender": {"name": "sender name or null", "department": "department or null"},
+  "detectedLanguage": "ISO 639-1 code, e.g. en",
+  "confidence": "HIGH|MEDIUM|LOW",
+  "summary": ["plain bullet 1", "plain bullet 2"],
+  "actions": [
+    {"description": "action text", "deadline": "YYYY-MM-DD or null", "urgency": "RED|YELLOW|GREEN"}
+  ],
+  "risks": ["risk description"],
+  "urgencyLevel": "RED|YELLOW|GREEN",
+  "contacts": [
+    {"type": "EMAIL|PHONE|ADDRESS|WEBSITE", "value": "contact value", "label": "e.g. Customer Service"}
+  ],
+  "glossaryTerms": [
+    {"term": "legal or technical term", "plainExplanation": "simple plain-language explanation"}
+  ]
 }
+```
 Rules:
+- Use plain language a 12-year-old can understand
+- Extract all amounts (€, $, £) and dates precisely
+- summary: 2 to 5 bullets covering main purpose, key amounts and key dates
+- deadline field: ISO date string if found, null if not
+- urgencyLevel RED = legal deadline / eviction / visa risk
+- urgencyLevel YELLOW = action needed, no immediate deadline
+- urgencyLevel GREEN = informational only
+- confidence HIGH = document is clear and fully readable; MEDIUM = some parts unclear; LOW = poor image quality or document unrecognised
+- glossaryTerms: include every legal, medical, financial or administrative term found
+- contacts: include every email, phone number, postal address and website found
+- sender: name of the organisation or person who sent the document; department if visible
+- detectedLanguage: ISO 639-1 code of the document's written language
 
-Use plain language a 12-year-old can understand
-  Extract all amounts (€, $, £) and dates precisely
-  deadline field: ISO date string if found, null if not
-  urgencyLevel RED = legal deadline / eviction / visa risk
-  urgencyLevel YELLOW = action needed, no immediate deadline
-  urgencyLevel GREEN = informational only
+## DocumentResult domain model (v2)
+
+```kotlin
+// v1 fields (never remove)
+data class DocumentResult(
+    val documentType: String,           // one of the VALID_DOCUMENT_TYPES
+    val summary: List<String>,          // 2–5 plain-language bullets
+    val actions: List<ActionItem>,
+    val risks: List<String>,
+    val urgencyLevel: UrgencyLevel,
+
+    // v2 enrichment (defaults to null/empty — no DB migration required for old sessions)
+    val sender: SenderInfo? = null,
+    val contacts: List<ContactInfo> = emptyList(),
+    val detectedLanguage: String? = null,
+    val confidence: Confidence = Confidence.MEDIUM,
+    val glossaryTerms: List<GlossaryTerm> = emptyList()
+)
+
+data class SenderInfo(val name: String?, val department: String?)
+enum class ContactType { EMAIL, PHONE, ADDRESS, WEBSITE }
+data class ContactInfo(val type: ContactType, val value: String, val label: String)
+enum class Confidence { HIGH, MEDIUM, LOW }
+data class GlossaryTerm(val term: String, val plainExplanation: String)
+
+// VALID_DOCUMENT_TYPES (v2)
+// "BILL", "CONTRACT", "LEGAL_NOTICE", "MEDICAL", "OTHER",
+// "TAX", "INSURANCE", "BANK", "VISA_IMMIGRATION", "GOVERNMENT_NOTICE", "RENTAL"
+```
 
 ## Defensive JSON parsing (model sometimes wraps in markdown despite instructions)
 ```kotlin
@@ -82,5 +128,10 @@ Use Android TextToSpeech — no external library.
 - SummaryCard: bulleted list of summary items
 - ActionsCard: each ActionItem as row with deadline chip if non-null
 - RisksCard: amber warning card, collapsible if >1 risk
+- SenderCard: sender name + department if sender != null
+- ContactsCard: each ContactInfo as tappable row (email/phone/address/website)
+- GlossaryCard: collapsible card listing GlossaryTerms if glossaryTerms non-empty
+- LanguageChip: shows detectedLanguage if non-null (e.g. "🌐 fr")
+- ConfidenceBadge: shows confidence level (HIGH/MEDIUM/LOW) as a small chip
 - ListenButton: FAB or button → triggers TTS
 - ShareButton: export summary as plain text (Tier 3, stub ok)
