@@ -98,6 +98,13 @@ import java.util.Date
 import java.util.Locale
 import kotlin.math.sin
 import kotlin.random.Random
+import android.net.Uri
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
+import com.clairedoc.app.actions.EmailDraft
 
 @Suppress("UNUSED_PARAMETER")
 @OptIn(ExperimentalMaterial3Api::class)
@@ -105,7 +112,8 @@ import kotlin.random.Random
 fun ResultScreen(
     resultJson: String,  // unused here — ViewModel reads from SavedStateHandle
     navController: NavController,
-    viewModel: ResultViewModel = hiltViewModel()
+    viewModel: ResultViewModel = hiltViewModel(),
+    emailViewModel: EmailActionViewModel = hiltViewModel()
 ) {
     val result by viewModel.result.collectAsState()
     val isSpeaking by viewModel.isSpeaking.collectAsState()
@@ -115,6 +123,9 @@ fun ResultScreen(
     val sessionStatus by viewModel.sessionStatus.collectAsState()
     val userTitle by viewModel.userTitle.collectAsState()
     val showConfetti by viewModel.showConfetti.collectAsState()
+    val emailUiState by emailViewModel.uiState.collectAsState()
+    val emailAddresses by emailViewModel.emailAddresses.collectAsState()
+    val selectedEmail by emailViewModel.selectedEmail.collectAsState()
 
     var isEditingTitle by remember { mutableStateOf(false) }
     var editTitleText by remember(userTitle) { mutableStateOf(userTitle ?: "") }
@@ -189,7 +200,15 @@ fun ResultScreen(
                     onSendQuestion = viewModel::askFollowUp,
                     onUpdateStatus = viewModel::updateStatus,
                     onDone = { navController.popBackStack(NavRoutes.HOME, inclusive = false) },
-                    context = context
+                    context = context,
+                    emailAddresses = emailAddresses,
+                    selectedEmail = selectedEmail,
+                    emailUiState = emailUiState,
+                    onSelectEmail = emailViewModel::selectEmail,
+                    onGenerateDraft = emailViewModel::generateDraft,
+                    onConfirmRegenerate = emailViewModel::confirmRegenerate,
+                    onUpdateDraftBody = emailViewModel::updateDraftBody,
+                    onResetDraft = emailViewModel::resetDraft
                 )
             }
         }
@@ -200,6 +219,7 @@ fun ResultScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ResultContent(
     result: DocumentResult,
@@ -211,8 +231,17 @@ private fun ResultContent(
     onSendQuestion: (String) -> Unit,
     onUpdateStatus: (SessionStatus) -> Unit,
     onDone: () -> Unit,
-    context: android.content.Context
+    context: android.content.Context,
+    emailAddresses: List<String>,
+    selectedEmail: String,
+    emailUiState: EmailDraftUiState,
+    onSelectEmail: (String) -> Unit,
+    onGenerateDraft: (String) -> Unit,
+    onConfirmRegenerate: (String) -> Unit,
+    onUpdateDraftBody: (String) -> Unit,
+    onResetDraft: () -> Unit
 ) {
+    val clipboardManager = LocalClipboardManager.current
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -264,6 +293,36 @@ private fun ResultContent(
             )
         }
         item { Spacer(Modifier.height(12.dp)) }
+
+        // Email reply section — only shown when the document contains at least one email contact
+        if (emailAddresses.isNotEmpty()) {
+            item {
+                EmailCard(
+                    emailAddresses = emailAddresses,
+                    selectedEmail = selectedEmail,
+                    uiState = emailUiState,
+                    onSelectEmail = onSelectEmail,
+                    onGenerateDraft = onGenerateDraft,
+                    onConfirmRegenerate = onConfirmRegenerate,
+                    onUpdateBody = onUpdateDraftBody,
+                    onReset = onResetDraft,
+                    onCopyToClipboard = { draft ->
+                        clipboardManager.setText(
+                            AnnotatedString("Subject: ${draft.subject}\n\n${draft.body}")
+                        )
+                    },
+                    onOpenEmailApp = { draft ->
+                        val uri = Uri.parse(
+                            "mailto:${Uri.encode(draft.to)}" +
+                            "?subject=${Uri.encode(draft.subject)}" +
+                            "&body=${Uri.encode(draft.body)}"
+                        )
+                        context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SENDTO, uri), null))
+                    }
+                )
+            }
+            item { Spacer(Modifier.height(12.dp)) }
+        }
 
         item {
             OutlinedButton(
@@ -908,6 +967,278 @@ private fun EmptyResultContent(paddingValues: PaddingValues) {
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Email card
+// ─────────────────────────────────────────────────────────────
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun EmailCard(
+    emailAddresses: List<String>,
+    selectedEmail: String,
+    uiState: EmailDraftUiState,
+    onSelectEmail: (String) -> Unit,
+    onGenerateDraft: (String) -> Unit,
+    onConfirmRegenerate: (String) -> Unit,
+    onUpdateBody: (String) -> Unit,
+    onReset: () -> Unit,
+    onCopyToClipboard: (EmailDraft) -> Unit,
+    onOpenEmailApp: (EmailDraft) -> Unit
+) {
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    var userIntent by rememberSaveable { mutableStateOf("") }
+    var showConfirmDialog by remember { mutableStateOf(false) }
+
+    val isGenerating = uiState is EmailDraftUiState.Generating
+    val readyState = uiState as? EmailDraftUiState.Ready
+    val errorMessage = (uiState as? EmailDraftUiState.Error)?.message
+
+    if (showConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showConfirmDialog = false },
+            title = { Text("Regenerate draft?") },
+            text = { Text("Your edits will be lost. Generate a new draft?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    onConfirmRegenerate(userIntent)
+                    showConfirmDialog = false
+                }) { Text("Regenerate") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showConfirmDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+    ) {
+        Column {
+            // ── Header — always visible ──────────────────────────────────
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { expanded = !expanded }
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text("📧", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        text = "Reply to this document",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+                Icon(
+                    imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = if (expanded) "Collapse" else "Expand"
+                )
+            }
+
+            AnimatedVisibility(
+                visible = expanded,
+                enter = expandVertically(),
+                exit = shrinkVertically()
+            ) {
+                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+
+                    // ── Recipient ────────────────────────────────────────
+                    Text(
+                        text = "To:",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    if (emailAddresses.size > 1) {
+                        // Multiple addresses: show selectable chips
+                        emailAddresses.chunked(2).forEach { chunk ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                chunk.forEach { email ->
+                                    FilterChip(
+                                        selected = email == selectedEmail,
+                                        onClick = { onSelectEmail(email) },
+                                        label = {
+                                            Text(
+                                                email,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                style = MaterialTheme.typography.labelSmall
+                                            )
+                                        },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                                // pad last row if odd number of emails
+                                if (chunk.size == 1) Spacer(Modifier.weight(1f))
+                            }
+                        }
+                    } else {
+                        Text(
+                            text = selectedEmail,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+
+                    Spacer(Modifier.height(16.dp))
+
+                    // ── User intent ──────────────────────────────────────
+                    OutlinedTextField(
+                        value = userIntent,
+                        onValueChange = { userIntent = it },
+                        label = { Text("What do you want to say?") },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !isGenerating,
+                        maxLines = 3
+                    )
+
+                    Spacer(Modifier.height(8.dp))
+
+                    // Suggestion chips — 2 per row
+                    val suggestions = listOf(
+                        "I want to dispute this",
+                        "I need more time to pay",
+                        "I have already paid",
+                        "I need clarification"
+                    )
+                    suggestions.chunked(2).forEach { row ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            row.forEach { suggestion ->
+                                SuggestionChip(
+                                    onClick = { userIntent = suggestion },
+                                    label = {
+                                        Text(
+                                            suggestion,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            style = MaterialTheme.typography.labelSmall
+                                        )
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(12.dp))
+
+                    // ── Generate button ──────────────────────────────────
+                    Button(
+                        onClick = {
+                            if (readyState?.isDirty == true) {
+                                showConfirmDialog = true
+                            } else {
+                                onGenerateDraft(userIntent)
+                            }
+                        },
+                        enabled = !isGenerating && userIntent.isNotBlank(),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Generate draft")
+                    }
+
+                    Spacer(Modifier.height(8.dp))
+
+                    // ── Generating indicator ─────────────────────────────
+                    AnimatedVisibility(visible = isGenerating) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.width(12.dp))
+                            Text(
+                                text = "Drafting email…",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    // ── Draft display ────────────────────────────────────
+                    AnimatedVisibility(visible = readyState != null) {
+                        readyState?.let { state ->
+                            Column {
+                                Text(
+                                    text = "Subject: ${state.draft.subject}",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(Modifier.height(8.dp))
+                                OutlinedTextField(
+                                    value = state.draft.body,
+                                    onValueChange = onUpdateBody,
+                                    label = { Text("Email body (you can edit)") },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    minLines = 6,
+                                    maxLines = 12
+                                )
+                                Spacer(Modifier.height(8.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    FilledTonalButton(
+                                        onClick = { onOpenEmailApp(state.draft) },
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Text(
+                                            "Open in email app",
+                                            maxLines = 1,
+                                            style = MaterialTheme.typography.labelSmall
+                                        )
+                                    }
+                                    OutlinedButton(
+                                        onClick = { onCopyToClipboard(state.draft) },
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Text("Copy", maxLines = 1)
+                                    }
+                                }
+                                Spacer(Modifier.height(8.dp))
+                            }
+                        }
+                    }
+
+                    // ── Error state ──────────────────────────────────────
+                    AnimatedVisibility(visible = errorMessage != null) {
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            errorMessage?.let { msg ->
+                                Text(
+                                    text = msg,
+                                    color = MaterialTheme.colorScheme.error,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    modifier = Modifier.padding(vertical = 4.dp)
+                                )
+                            }
+                            TextButton(onClick = onReset) {
+                                Text("Try again")
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

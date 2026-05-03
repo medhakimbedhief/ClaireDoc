@@ -47,6 +47,30 @@ class PromptBuilder @Inject constructor() {
     /** User turn for a follow-up question. */
     fun buildFollowUpUserMessage(question: String): String = question
 
+    /**
+     * Prompt for on-device email draft generation.
+     *
+     * The model is asked to reply to [analysisJson] in [detectedLanguage] based on
+     * [userIntent], and to return a JSON object with "subject" and "body" fields only.
+     * This is intentionally separate from [SYSTEM_PROMPT] — that prompt forces JSON
+     * analysis output, whereas here we want a plain email body.
+     */
+    fun buildEmailDraftPrompt(
+        analysisJson: String,
+        userIntent: String,
+        detectedLanguage: String = "English"
+    ): String = buildString {
+        append("You are helping someone write a professional reply to an official document.\n")
+        append("Here is what the document says:\n\n")
+        append(analysisJson)
+        append("\n\n")
+        append("The user wants to: $userIntent\n\n")
+        append("Write a professional email reply in $detectedLanguage.\n")
+        append("Respond ONLY with a JSON object:\n")
+        append("""{"subject": "Re: ...", "body": "full email body here"}""")
+        append("\nKeep it polite, concise, and appropriate for the document type.")
+    }
+
     companion object {
         // Keep this as a top-level companion constant so tests can assert
         // the exact string without instantiating the class.
