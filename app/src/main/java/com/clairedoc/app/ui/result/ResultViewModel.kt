@@ -114,24 +114,11 @@ class ResultViewModel @Inject constructor(
     }
 
     private fun startReading(result: DocumentResult) {
-        viewModelScope.launch {
-            _isSpeaking.value = true
-            ttsManager.speak(
-                "This is a ${result.documentType.replace("_", " ").lowercase()}"
-            )
-            result.summary.forEach { bullet -> ttsManager.speak(bullet) }
-            result.actions.firstOrNull()?.let { action ->
-                val msg = buildString {
-                    append("Important: ${action.description}")
-                    action.deadline?.let { append(", due $it") }
-                }
-                ttsManager.speak(msg)
-            }
-            result.risks.firstOrNull()?.let { risk ->
-                ttsManager.speak("Warning: $risk")
-            }
-            _isSpeaking.value = false
-        }
+        _isSpeaking.value = true
+        // Delegates utterance ordering, locale switching, and confidence warning
+        // to TTSManager.speak(DocumentResult). The lambda runs on the TTS thread
+        // when the last utterance finishes naturally (stop() handles early cancel).
+        ttsManager.speak(result) { _isSpeaking.value = false }
     }
 
     // ── Q&A ───────────────────────────────────────────────────
