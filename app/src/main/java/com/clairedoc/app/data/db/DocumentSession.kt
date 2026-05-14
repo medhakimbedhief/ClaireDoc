@@ -23,5 +23,12 @@ data class DocumentSession(
     val userTitle: String? = null,
     val isArchived: Boolean = false,
     val chatHistoryJson: String = "[]",  // JSON array of ChatMessage
-    val pageCount: Int? = null
+    val pageCount: Int? = null,
+    /**
+     * Full [DocumentResult] serialised to JSON at scan time.
+     * Includes all v2 fields (contacts, glossaryTerms, confidence, sender, detectedLanguage)
+     * that are NOT stored individually. Empty string for sessions saved before this column
+     * was added (migration 4→5) — [toDocumentResult] falls back gracefully in that case.
+     */
+    val fullResultJson: String = ""
 )

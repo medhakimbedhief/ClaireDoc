@@ -26,10 +26,30 @@ fun DocumentResult.toDocumentSession(
     risksJson = gson.toJson(risks),
     urgencyLevel = urgencyLevel.name,
     status = SessionStatus.UNREAD,
-    pageCount = pageCount
+    pageCount = pageCount,
+    // Persist the complete result so that navigating back from Home or RAG sources
+    // restores all v2 fields (contacts, glossaryTerms, confidence, sender, detectedLanguage).
+    fullResultJson = gson.toJson(this)
 )
 
+/**
+ * Reconstructs a [DocumentResult] from this session row.
+ *
+ * Strategy:
+ * 1. If [fullResultJson] is present (sessions saved after migration 4→5), deserialise it
+ *    directly — all v2 fields (contacts, glossaryTerms, confidence, …) are restored.
+ * 2. Otherwise fall back to the individual JSON columns — only the basic 5 fields are
+ *    available (pre-migration rows), which is fine for those older sessions.
+ */
 fun DocumentSession.toDocumentResult(gson: Gson): DocumentResult {
+    if (fullResultJson.isNotBlank()) {
+        return runCatching { gson.fromJson(fullResultJson, DocumentResult::class.java) }
+            .getOrNull() ?: buildLegacyResult(gson)
+    }
+    return buildLegacyResult(gson)
+}
+
+private fun DocumentSession.buildLegacyResult(gson: Gson): DocumentResult {
     val listStringType = object : TypeToken<List<String>>() {}.type
     val listActionType = object : TypeToken<List<ActionItem>>() {}.type
     return DocumentResult(

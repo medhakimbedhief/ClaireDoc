@@ -8,12 +8,25 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [DocumentSession::class],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 @TypeConverters(DocumentSessionConverters::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun documentSessionDao(): DocumentSessionDao
+}
+
+/**
+ * Adds the [DocumentSession.fullResultJson] column.
+ * Existing rows get an empty string default — [DocumentSession.toDocumentResult] falls
+ * back to the individual JSON columns for those rows.
+ */
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(database: SupportSQLiteDatabase) {
+        database.execSQL(
+            "ALTER TABLE document_sessions ADD COLUMN fullResultJson TEXT NOT NULL DEFAULT ''"
+        )
+    }
 }
 
 val MIGRATION_3_4 = object : Migration(3, 4) {
