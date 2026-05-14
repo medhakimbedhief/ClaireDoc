@@ -7,6 +7,8 @@ object NavRoutes {
     const val MODEL_MANAGER = "model_manager"
     const val HOME = "home"
     const val SCAN = "scan"
+    const val RAG_CHAT = "rag_chat"
+    const val SETTINGS  = "settings"
     const val RESULT = "result/{resultJson}/{sessionId}"
 
     fun resultRoute(json: String, sessionId: String): String =

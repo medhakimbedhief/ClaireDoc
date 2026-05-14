@@ -3,6 +3,18 @@ package com.clairedoc.app.pipeline
 import javax.inject.Inject
 
 /**
+ * Metadata for a single retrieved chunk used in a RAG user message.
+ * Defined here (pipeline package) so both [PromptBuilder] and [RagChain] can reference it
+ * without cross-layer imports.
+ */
+data class RagContext(
+    val sessionId: String,
+    val documentTitle: String,
+    val documentType: String,
+    val chunkText: String
+)
+
+/**
  * Holds the exact system prompt for Gemma 4 E2B document analysis.
  * Do NOT paraphrase or modify [SYSTEM_PROMPT] — the model was evaluated
  * against this exact wording and schema.
@@ -48,6 +60,28 @@ class PromptBuilder @Inject constructor() {
     fun buildFollowUpUserMessage(question: String): String = question
 
     /**
+     * Static system prompt for cross-document RAG Q&A.
+     * Context is injected per-turn via [buildRagUserMessage] — keeping the system
+     * prompt constant maximises KV-cache reuse across turns.
+     */
+    fun buildRagSystemPrompt(): String = RAG_SYSTEM_PROMPT
+
+    /**
+     * Builds the user turn for a RAG query.
+     * Retrieved [retrievedChunks] are embedded inline so the model sees both
+     * the supporting passages and [question] in a single turn.
+     */
+    fun buildRagUserMessage(question: String, retrievedChunks: List<RagContext>): String = buildString {
+        append("Here are relevant excerpts from the user's documents:\n\n")
+        retrievedChunks.forEachIndexed { i, ctx ->
+            append("[${i + 1}] ${ctx.documentTitle} (${ctx.documentType}):\n")
+            append(ctx.chunkText.trim())
+            append("\n\n")
+        }
+        append("Question: $question")
+    }
+
+    /**
      * Prompt for on-device email draft generation.
      *
      * The model is asked to reply to [analysisJson] in [detectedLanguage] based on
@@ -74,6 +108,14 @@ class PromptBuilder @Inject constructor() {
     companion object {
         // Keep this as a top-level companion constant so tests can assert
         // the exact string without instantiating the class.
+
+        /** Static RAG system instruction — returned verbatim by [buildRagSystemPrompt]. */
+        const val RAG_SYSTEM_PROMPT = """You are a helpful assistant that answers questions about the user's official documents.
+Answer based ONLY on the document excerpts provided in the user's message.
+If the excerpts do not contain enough information, say so clearly.
+Answer in plain, simple language — like explaining to a 12-year-old.
+Give a short, direct answer in 1 to 4 sentences. Do NOT output JSON."""
+
         const val SYSTEM_PROMPT = """You are a document assistant helping people understand official documents.
 Analyze the provided document image.
 Respond ONLY with a valid JSON object. No explanation, no markdown fences, no preamble.

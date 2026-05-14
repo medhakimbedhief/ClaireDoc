@@ -4,6 +4,7 @@ import android.app.DownloadManager
 import android.content.Context
 import android.net.Uri
 import android.util.Log
+import com.clairedoc.app.BuildConfig
 import com.clairedoc.app.data.model.DownloadProgress
 import com.clairedoc.app.data.model.ModelVariant
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -19,7 +20,15 @@ private const val TAG = "ClaireDoc_Download"
 private const val PREFS_NAME = "clairedoc_prefs"
 private const val KEY_DOWNLOAD_ID = "download_id"
 private const val KEY_DOWNLOAD_VARIANT = "download_variant"
+private const val KEY_HF_TOKEN = "hf_token"
 private const val POLL_INTERVAL_MS = 500L
+
+// Embedder model: litert-community/EmbeddingGemma-300M (gated — requires Gemma licence).
+// A HuggingFace read token must be passed to startEmbedderDownload(); the token is added as
+// an Authorization header so DownloadManager can follow the LFS redirect to the CDN.
+private const val EMBEDDER_MODEL_URL =
+    "https://huggingface.co/litert-community/EmbeddingGemma-300M/resolve/main/embeddinggemma-300M_seq512_mixed-precision.tflite"
+private const val MIN_EMBEDDER_MODEL_BYTES = 1_048_576L      // 1 MB guard against partial download
 
 /** Minimum file size to consider a model file valid (guards against partial downloads). */
 internal const val MIN_MODEL_SIZE_BYTES = 100_000_000L
@@ -57,6 +66,7 @@ class ModelDownloadManager @Inject constructor(
      */
     fun startDownload(variant: ModelVariant = ModelVariant.E2B): Long {
         val destFile = modelFileFor(variant)
+        val hfToken = getStoredHfToken()
 
         val request = DownloadManager.Request(Uri.parse(variant.url))
             .setTitle("ClaireDoc — ${variant.displayName}")
@@ -67,6 +77,13 @@ class ModelDownloadManager @Inject constructor(
             )
             .setAllowedOverMetered(true)
             .setAllowedOverRoaming(false)
+            .apply {
+                // litert-community Gemma models are gated — pass HF read token if available.
+                // Token priority: BuildConfig.HF_TOKEN (local.properties) → SharedPreferences.
+                if (!hfToken.isNullOrBlank()) {
+                    addRequestHeader("Authorization", "Bearer $hfToken")
+                }
+            }
 
         val id = downloadManager.enqueue(request)
         prefs.edit()
@@ -146,6 +163,122 @@ class ModelDownloadManager @Inject constructor(
         return file.delete().also { deleted ->
             if (deleted) Log.d(TAG, "Deleted ${variant.filename}")
             else Log.w(TAG, "Failed to delete ${variant.filename}")
+        }
+    }
+
+    // ──────────────────────────────────────────────────────────
+    //  Embedder model (EmbeddingGemma-300M)
+    // ──────────────────────────────────────────────────────────
+
+    /**
+     * Returns the embedder directory, falling back to internal storage if
+     * external storage is not mounted (getExternalFilesDir returns null).
+     */
+    private fun embedderDir(): File =
+        File(
+            context.getExternalFilesDir("models") ?: context.filesDir,
+            "embedder"
+        ).also { it.mkdirs() }
+
+    /**
+     * Returns true if the embedding model file is present and above the minimum size threshold.
+     * The tokenizer is bundled in app assets and does not need a separate download check.
+     */
+    fun checkEmbedderExists(): Boolean {
+        val model = File(embedderDir(), "embeddinggemma-300m.tflite")
+        return model.exists() && model.length() > MIN_EMBEDDER_MODEL_BYTES
+    }
+
+    // ── HuggingFace token storage ──────────────────────────────────────────────
+
+    /**
+     * Persists [token] to SharedPreferences so it survives process restarts.
+     * Pass an empty string to clear the stored token.
+     */
+    fun storeHfToken(token: String) {
+        prefs.edit().putString(KEY_HF_TOKEN, token.trim()).apply()
+        Log.d(TAG, "HF token ${if (token.isBlank()) "cleared" else "stored"}")
+    }
+
+    /**
+     * Returns the best available HF token, checked in priority order:
+     * 1. BuildConfig.HF_TOKEN — injected from local.properties at build time (developer machine)
+     * 2. SharedPreferences — saved by the user via the in-app token entry field
+     * Returns null if neither source has a non-blank token.
+     */
+    fun getStoredHfToken(): String? {
+        val buildToken = BuildConfig.HF_TOKEN.takeIf { it.isNotBlank() }
+        if (buildToken != null) return buildToken
+        return prefs.getString(KEY_HF_TOKEN, null)?.takeIf { it.isNotBlank() }
+    }
+
+    // ── Embedder download ──────────────────────────────────────────────────────
+
+    /**
+     * Enqueues a [DownloadManager] request for the EmbeddingGemma-300M TFLite model.
+     * [hfToken] must be a valid HuggingFace read token — the repo is gated and returns
+     * HTTP 401 without it. The token is sent as `Authorization: Bearer <token>` on the
+     * initial request; HuggingFace then redirects to a public CDN URL.
+     *
+     * The tokenizer is bundled in app assets — no tokenizer download is needed.
+     * Returns (modelDownloadId, -1L), or (-1L, -1L) if DownloadManager threw.
+     */
+    fun startEmbedderDownload(hfToken: String? = getStoredHfToken()): Pair<Long, Long> {
+        val destFile = File(embedderDir(), "embeddinggemma-300m.tflite")
+        Log.d(TAG, "Embedder dest: ${destFile.absolutePath}")
+        Log.d(TAG, "HF token present: ${!hfToken.isNullOrBlank()}")
+
+        val modelId = runCatching {
+            DownloadManager.Request(Uri.parse(EMBEDDER_MODEL_URL))
+                .setTitle("ClaireDoc — Embedding Model (~180 MB)")
+                .setDescription("One-time download for cross-document search")
+                .setDestinationUri(Uri.fromFile(destFile))
+                .setNotificationVisibility(
+                    DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED
+                )
+                .setAllowedOverMetered(true)
+                .setAllowedOverRoaming(false)
+                .apply {
+                    if (!hfToken.isNullOrBlank()) {
+                        addRequestHeader("Authorization", "Bearer $hfToken")
+                    }
+                }
+                .let { downloadManager.enqueue(it) }
+        }.onFailure { e ->
+            Log.e(TAG, "DownloadManager.enqueue failed", e)
+        }.getOrElse { -1L }
+
+        Log.d(TAG, "Embedder model download enqueued: id=$modelId")
+        return Pair(modelId, -1L)
+    }
+
+    /**
+     * Queries the DownloadManager for the human-readable failure reason of [downloadId].
+     * Returns a diagnostic string — call this when [DownloadProgress.isFailed] is true.
+     */
+    fun getFailureReason(downloadId: Long): String {
+        val cursor = downloadManager.query(
+            DownloadManager.Query().setFilterById(downloadId)
+        ) ?: return "null cursor (download not found)"
+
+        return cursor.use { c ->
+            if (!c.moveToFirst()) return "no row for id=$downloadId"
+            val status = c.getInt(c.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
+            val reason = c.getInt(c.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON))
+            val uri    = c.getString(c.getColumnIndexOrThrow(DownloadManager.COLUMN_URI))
+            val reasonStr = when (reason) {
+                DownloadManager.ERROR_CANNOT_RESUME        -> "CANNOT_RESUME"
+                DownloadManager.ERROR_DEVICE_NOT_FOUND     -> "DEVICE_NOT_FOUND"
+                DownloadManager.ERROR_FILE_ALREADY_EXISTS  -> "FILE_ALREADY_EXISTS"
+                DownloadManager.ERROR_FILE_ERROR           -> "FILE_ERROR"
+                DownloadManager.ERROR_HTTP_DATA_ERROR      -> "HTTP_DATA_ERROR"
+                DownloadManager.ERROR_INSUFFICIENT_SPACE   -> "INSUFFICIENT_SPACE"
+                DownloadManager.ERROR_TOO_MANY_REDIRECTS   -> "TOO_MANY_REDIRECTS"
+                DownloadManager.ERROR_UNHANDLED_HTTP_CODE  -> "UNHANDLED_HTTP_CODE (HTTP $reason)"
+                DownloadManager.ERROR_UNKNOWN              -> "UNKNOWN"
+                else -> "code=$reason"
+            }
+            "status=$status reason=$reasonStr uri=$uri"
         }
     }
 }

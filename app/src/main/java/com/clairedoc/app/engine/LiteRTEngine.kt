@@ -177,6 +177,19 @@ class LiteRTEngine @Inject constructor(
         }
     }.flowOn(Dispatchers.IO)
 
+    /**
+     * Text-only convenience wrapper around [generateResponse].
+     * Used by [RagChain] for cross-document Q&A where no document image is involved.
+     */
+    fun generateText(
+        systemInstruction: String,
+        userMessage: String
+    ): Flow<String> = generateResponse(
+        imageFile = null,
+        systemPrompt = systemInstruction,
+        userPrompt = userMessage
+    )
+
     override fun close() {
         engine?.close()
         engine = null

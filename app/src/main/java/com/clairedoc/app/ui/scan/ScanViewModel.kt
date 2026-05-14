@@ -13,7 +13,9 @@ import androidx.lifecycle.viewModelScope
 import com.clairedoc.app.data.model.SourceType
 import com.clairedoc.app.data.repository.DocumentSessionRepository
 import com.clairedoc.app.pipeline.DocumentAnalyzer
+import com.clairedoc.app.rag.ChunkRepository
 import com.google.gson.Gson
+import kotlinx.coroutines.flow.first
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -51,6 +53,7 @@ class ScanViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val documentAnalyzer: DocumentAnalyzer,
     private val repository: DocumentSessionRepository,
+    private val chunkRepository: ChunkRepository,
     private val gson: Gson
 ) : ViewModel() {
 
@@ -189,6 +192,18 @@ class ScanViewModel @Inject constructor(
                 // ML Kit content:// URIs expire after the activity-result callback returns,
                 // so we copy to internal storage now for use by follow-up Q&A later.
                 cacheImageForQA(sessionId, analysisUri)
+
+                // Index the document in ObjectBox for cross-document RAG search.
+                // Runs concurrently so it does not delay navigation to ResultScreen.
+                // Uses a fresh coroutine so even if indexing is slow, the user
+                // can already see their results while chunks are being embedded.
+                viewModelScope.launch(Dispatchers.IO) {
+                    runCatching {
+                        val session = repository.getSession(sessionId).first()
+                        if (session != null) chunkRepository.indexSession(session)
+                    }
+                }
+
                 val json = gson.toJson(result.result)
                 _uiState.value = ScanUiState.Success(json, sessionId)
             }

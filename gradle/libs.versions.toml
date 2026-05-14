@@ -1,13 +1,19 @@
 [versions]
-agp = "8.3.2"
-# Kotlin 2.1.0: stable Kotlin 2.x release, compatible with AGP 8.3.x and Hilt 2.56.2.
+agp = "8.7.3"
+# AGP 8.7.x: requires Gradle 8.9+ (wrapper updated). Needed because transitive deps
+# (Compose 1.9, lifecycle 2.10, core-ktx 1.15) require AGP 8.6.0+ and compileSdk 35.
+# Kotlin 2.1.0: stable Kotlin 2.x release, compatible with AGP 8.7.x and Hilt 2.56.2.
 # Kotlin 2.0+ requires the org.jetbrains.kotlin.plugin.compose plugin instead of
 # composeOptions { kotlinCompilerExtensionVersion }.
 # KSP 2.1.0-1.0.29 matches Kotlin 2.1.0 exactly — version prefix must match.
 kotlin = "2.1.0"
 ksp = "2.1.0-1.0.29"
 hilt = "2.56.2"
-compose-bom = "2024.04.01"
+compose-bom = "2024.09.03"
+# 2024.04.01 → 2024.09.03: ObjectBox 5.x transitively pulls Foundation 1.9.0 which
+# requires IndicationNodeFactory for clickable (breaking change in Foundation 1.7.0).
+# 2024.09.03 → Material3 1.3.1 which provides an IndicationNodeFactory-based ripple
+# as LocalIndication, fixing the runtime IllegalArgumentException crash.
 navigation = "2.7.7"
 room = "2.6.1"
 # litertlm-android versioning: 0.1.0 does not exist. Actual releases start at 0.7.0.
@@ -22,6 +28,10 @@ coroutines = "1.8.0"
 activity-compose = "1.9.0"
 lifecycle = "2.7.0"
 hilt-navigation-compose = "1.2.0"
+# RAG layer
+litert = "2.1.0"
+objectbox = "5.4.2"
+junit = "4.13.2"
 
 [libraries]
 # Compose
@@ -64,6 +74,18 @@ coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutin
 # Core
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version = "1.13.0" }
 
+# RAG — LiteRT (TFLite runtime for embedding model inference)
+# litert-gpu:2.1.0 is not published to any Maven repo; CPU-only delegate is used instead.
+litert = { group = "com.google.ai.edge.litert", name = "litert", version.ref = "litert" }
+
+# RAG — ObjectBox vector store
+objectbox-android = { group = "io.objectbox", name = "objectbox-android", version.ref = "objectbox" }
+objectbox-kotlin = { group = "io.objectbox", name = "objectbox-kotlin", version.ref = "objectbox" }
+# objectbox-processor is handled automatically by the io.objectbox Gradle plugin (KAPT path).
+
+# Testing
+junit = { group = "junit", name = "junit", version.ref = "junit" }
+
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
@@ -71,3 +93,4 @@ kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 hilt = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
+objectbox = { id = "io.objectbox", version.ref = "objectbox" }

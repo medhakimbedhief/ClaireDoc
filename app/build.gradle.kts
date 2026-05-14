@@ -1,21 +1,36 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.hilt)
     alias(libs.plugins.ksp)
+    alias(libs.plugins.objectbox)
+}
+
+// Read local.properties so secrets (HF token etc.) never need to be in source control.
+val localProps = Properties().also { props ->
+    val f = rootProject.file("local.properties")
+    if (f.exists()) f.inputStream().use(props::load)
 }
 
 android {
     namespace = "com.clairedoc.app"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.clairedoc.app"
         minSdk = 26
-        targetSdk = 34
+        targetSdk = 35
         versionCode = 1
         versionName = "1.0"
+
+        // Inject the HuggingFace token from local.properties (or CI env var) as a
+        // BuildConfig constant. Empty string if not set — app falls back to UI entry.
+        val hfToken = localProps["HUGGINGFACE_TOKEN"]?.toString()?.trim()
+            ?: System.getenv("HUGGINGFACE_TOKEN").orEmpty()
+        buildConfigField("String", "HF_TOKEN", "\"$hfToken\"")
 
         // Only arm64-v8a: covers Galaxy A52s 5G (Snapdragon 778G).
         // Omitting x86_64 avoids UnsatisfiedLinkError if litertlm-android
@@ -54,9 +69,10 @@ android {
 
     buildFeatures {
         compose = true
-        // composeOptions { kotlinCompilerExtensionVersion } is removed.
-        // kotlin.plugin.compose (added above) handles this automatically for
-        // Kotlin 2.0+ — it picks the correct Compose compiler version.
+        buildConfig = true   // required to generate BuildConfig.HF_TOKEN
+        // composeOptions { kotlinCompilerExtensionVersion } is NOT needed.
+        // org.jetbrains.kotlin.plugin.compose (added above) handles compiler
+        // selection automatically for Kotlin 2.0+.
     }
 
     packaging {
@@ -68,6 +84,9 @@ android {
             // pickFirsts prevents "More than one file was found" build error.
             pickFirsts += "**/libOpenCL.so"
             pickFirsts += "**/libvndksupport.so"
+            // LiteRT 2.1.0 and litertlm-android may both bundle the TFLite runtime.
+            pickFirsts += "**/libtensorflowlite_jni.so"
+            pickFirsts += "**/libtensorflowlite_gpu_jni.so"
         }
     }
 }
@@ -107,6 +126,18 @@ dependencies {
     implementation(libs.mlkit.docscanner)
     implementation(libs.gson)
     implementation(libs.coroutines.android)
+
+    // RAG: TFLite runtime for EmbeddingGemma-300M inference
+    implementation(libs.litert)
+
+    // RAG: ObjectBox vector store (HNSW vector index for chunk retrieval)
+    implementation(libs.objectbox.android)
+    implementation(libs.objectbox.kotlin)
+    // Note: no ksp()/kapt() needed — the io.objectbox plugin registers its KAPT processor
+    // automatically via kaptDebugKotlin, which generates MyObjectBox + DocumentChunk_.
+
+    // JVM unit tests
+    testImplementation(libs.junit)
 }
 
 // Force a single protobuf variant across the entire dependency graph.

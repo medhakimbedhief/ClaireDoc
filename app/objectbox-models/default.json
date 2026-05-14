@@ -1,0 +1,74 @@
+{
+  "_note1": "KEEP THIS FILE! Check it into a version control system (VCS) like git.",
+  "_note2": "ObjectBox manages crucial IDs for your object model. See docs for details.",
+  "_note3": "If you have VCS merge conflicts, you must resolve them according to ObjectBox docs.",
+  "entities": [
+    {
+      "id": "1:2105381128274019494",
+      "lastPropertyId": "9:8115272730953131839",
+      "name": "DocumentChunk",
+      "properties": [
+        {
+          "id": "1:3781258717841660014",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:631446985625535434",
+          "name": "sessionId",
+          "type": 9
+        },
+        {
+          "id": "3:382362971274424611",
+          "name": "documentTitle",
+          "type": 9
+        },
+        {
+          "id": "4:2959171555405122340",
+          "name": "chunkIndex",
+          "type": 5
+        },
+        {
+          "id": "5:7483606552993889649",
+          "name": "totalChunks",
+          "type": 5
+        },
+        {
+          "id": "6:7990911556361171984",
+          "name": "text",
+          "type": 9
+        },
+        {
+          "id": "7:6136663922621697893",
+          "name": "pageNumber",
+          "type": 5
+        },
+        {
+          "id": "8:3095817074700601219",
+          "name": "createdAt",
+          "type": 6
+        },
+        {
+          "id": "9:8115272730953131839",
+          "name": "embedding",
+          "indexId": "1:3244165982163480222",
+          "type": 28,
+          "flags": 8
+        }
+      ],
+      "relations": []
+    }
+  ],
+  "lastEntityId": "1:2105381128274019494",
+  "lastIndexId": "1:3244165982163480222",
+  "lastRelationId": "0:0",
+  "lastSequenceId": "0:0",
+  "modelVersion": 5,
+  "modelVersionParserMinimum": 5,
+  "retiredEntityUids": [],
+  "retiredIndexUids": [],
+  "retiredPropertyUids": [],
+  "retiredRelationUids": [],
+  "version": 1
+}

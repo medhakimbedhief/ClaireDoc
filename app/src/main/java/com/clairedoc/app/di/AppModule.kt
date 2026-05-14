@@ -13,6 +13,7 @@ import com.clairedoc.app.pipeline.DocumentAnalyzer
 import com.clairedoc.app.pipeline.JsonParser
 import com.clairedoc.app.pipeline.PromptBuilder
 import com.clairedoc.app.tts.TTSManager
+import com.clairedoc.app.rag.MyObjectBox
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import dagger.Module
@@ -20,6 +21,7 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import io.objectbox.BoxStore
 import javax.inject.Singleton
 
 @Module
@@ -78,4 +80,12 @@ object AppModule {
     @Provides
     fun provideDocumentSessionDao(db: AppDatabase): DocumentSessionDao =
         db.documentSessionDao()
+
+    // ObjectBox vector store — MyObjectBox is generated at compile time by the
+    // ObjectBox Gradle plugin from @Entity classes in com.clairedoc.app.rag.*
+    @Singleton
+    @Provides
+    fun provideObjectBoxStore(
+        @ApplicationContext context: Context
+    ): BoxStore = MyObjectBox.builder().androidContext(context).build()
 }
