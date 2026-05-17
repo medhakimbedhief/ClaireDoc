@@ -57,6 +57,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.SuggestionChip
@@ -217,6 +220,13 @@ fun ResultScreen(
                                     onDismissRequest = { showOverflowMenu = false }
                                 ) {
                                     DropdownMenuItem(
+                                        text = { Text("Set reminder") },
+                                        onClick = {
+                                            showOverflowMenu = false
+                                            launchAlarmIntent(context)
+                                        }
+                                    )
+                                    DropdownMenuItem(
                                         text = { Text("Retake document") },
                                         onClick = {
                                             showOverflowMenu = false
@@ -323,15 +333,9 @@ private fun ResultContent(
         }
         item { Spacer(Modifier.height(12.dp)) }
         item {
-            StatusSection(status = sessionStatus, onStepTapped = onUpdateStatus)
-        }
-        item { Spacer(Modifier.height(8.dp)) }
-        item {
-            QuickActionButtons(
-                status = sessionStatus,
-                onMarkDone = { onUpdateStatus(SessionStatus.DONE) },
-                onHandlingIt = { onUpdateStatus(SessionStatus.IN_PROGRESS) },
-                onRemindMe = { launchAlarmIntent(context) }
+            StatusSegmentedButton(
+                status          = sessionStatus,
+                onStatusChanged = onUpdateStatus
             )
         }
         item { Spacer(Modifier.height(16.dp)) }
@@ -442,24 +446,26 @@ private fun ResultContent(
 }
 
 // ─────────────────────────────────────────────────────────────
-//  Status stepper & quick actions
+//  Status segmented button
 // ─────────────────────────────────────────────────────────────
 
 @Composable
-private fun StatusSection(status: SessionStatus, onStepTapped: (SessionStatus) -> Unit) {
-    val steps = listOf(
-        SessionStatus.UNREAD to "Unread",
+private fun StatusSegmentedButton(
+    status: SessionStatus,
+    onStatusChanged: (SessionStatus) -> Unit
+) {
+    val statusOptions = listOf(
+        SessionStatus.UNREAD      to "Unread",
         SessionStatus.IN_PROGRESS to "In Progress",
-        SessionStatus.DONE to "Done"
+        SessionStatus.DONE        to "Done"
     )
-    val linearOrder = mapOf(
-        SessionStatus.UNREAD to 0,
-        SessionStatus.IN_PROGRESS to 1,
-        SessionStatus.DONE to 2
-    )
-    val currentOrder = linearOrder[status] ?: -1  // OVERDUE → -1, no step highlighted
 
-    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+    ) {
+        // OVERDUE is a computed state, not a selectable option — show as badge above
         if (status == SessionStatus.OVERDUE) {
             Surface(
                 color = Color(0xFFD32F2F),
@@ -476,99 +482,15 @@ private fun StatusSection(status: SessionStatus, onStepTapped: (SessionStatus) -
             }
         }
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            steps.forEachIndexed { index, (stepStatus, label) ->
-                val stepOrder = linearOrder[stepStatus]!!
-                val isActive = status == stepStatus
-                val isPast = currentOrder > stepOrder && currentOrder >= 0
-
-                val bg = when {
-                    isActive -> MaterialTheme.colorScheme.primary
-                    isPast   -> MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
-                    else     -> Color.Transparent
-                }
-                val textColor = when {
-                    isActive -> MaterialTheme.colorScheme.onPrimary
-                    isPast   -> MaterialTheme.colorScheme.primary
-                    else     -> MaterialTheme.colorScheme.outline
-                }
-
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(50))
-                        .background(bg)
-                        .then(
-                            if (!isActive && !isPast)
-                                Modifier.border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(50))
-                            else Modifier
-                        )
-                        .clickable { onStepTapped(stepStatus) }
-                        .padding(vertical = 6.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = label,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = textColor,
-                        fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
-                        textAlign = TextAlign.Center,
-                        maxLines = 1
-                    )
-                }
-
-                if (index < steps.lastIndex) {
-                    val connectorColor = if (isPast || isActive)
-                        MaterialTheme.colorScheme.primary
-                    else
-                        MaterialTheme.colorScheme.outlineVariant
-                    Box(
-                        modifier = Modifier
-                            .weight(0.25f)
-                            .height(2.dp)
-                            .background(connectorColor)
-                    )
-                }
+        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+            statusOptions.forEachIndexed { index, (s, label) ->
+                SegmentedButton(
+                    selected = status == s,
+                    onClick  = { onStatusChanged(s) },
+                    shape    = SegmentedButtonDefaults.itemShape(index, statusOptions.size),
+                    label    = { Text(label, style = MaterialTheme.typography.labelMedium) }
+                )
             }
-        }
-    }
-}
-
-@Composable
-private fun QuickActionButtons(
-    status: SessionStatus,
-    onMarkDone: () -> Unit,
-    onHandlingIt: () -> Unit,
-    onRemindMe: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp)
-    ) {
-        FilledTonalButton(
-            onClick = onRemindMe,
-            modifier = Modifier.weight(1f)
-        ) {
-            Text("Remind me", maxLines = 1, style = MaterialTheme.typography.labelSmall)
-        }
-        FilledTonalButton(
-            onClick = onHandlingIt,
-            enabled = status != SessionStatus.IN_PROGRESS,
-            modifier = Modifier.weight(1f)
-        ) {
-            Text("Handling it", maxLines = 1, style = MaterialTheme.typography.labelSmall)
-        }
-        Button(
-            onClick = onMarkDone,
-            enabled = status != SessionStatus.DONE,
-            modifier = Modifier.weight(1f)
-        ) {
-            Text("Done", maxLines = 1, style = MaterialTheme.typography.labelSmall)
         }
     }
 }
