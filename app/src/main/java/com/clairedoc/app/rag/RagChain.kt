@@ -6,11 +6,13 @@ import com.clairedoc.app.engine.EngineState
 import com.clairedoc.app.engine.LiteRTEngine
 import com.clairedoc.app.pipeline.PromptBuilder
 import com.clairedoc.app.pipeline.RagContext
+import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.toList
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -28,7 +30,7 @@ private const val MAX_WORD_BUDGET = 2000
  * Discriminated union emitted by [RagChain.query].
  *
  * Emission order:
- *   [TextToken]* → [Sources] (on success)
+ *   [TextToken]* → [Sources] → [Suggestions]? (on success)
  *   [Error]              (on failure — flow completes immediately after)
  */
 sealed class RagToken {
@@ -40,6 +42,12 @@ sealed class RagToken {
      * was derived from.  The ViewModel maps these to SourceReference for the UI.
      */
     data class Sources(val chunks: List<RankedChunk>) : RagToken()
+
+    /**
+     * Emitted once after [Sources], carrying AI-generated follow-up suggestions.
+     * Ephemeral — ViewModel stores in-memory only, never persisted.
+     */
+    data class Suggestions(val questions: List<String>) : RagToken()
 
     /** Terminal error token — the flow completes immediately after this is emitted. */
     data class Error(val message: String) : RagToken()
@@ -65,7 +73,8 @@ class RagChain @Inject constructor(
     private val chunkRepository: ChunkRepository,
     private val engine: LiteRTEngine,
     private val promptBuilder: PromptBuilder,
-    private val sessionRepository: DocumentSessionRepository
+    private val sessionRepository: DocumentSessionRepository,
+    private val gson: Gson
 ) {
 
     /**
@@ -156,9 +165,13 @@ class RagChain @Inject constructor(
         val systemPrompt = promptBuilder.buildRagSystemPrompt()
         val userMessage  = promptBuilder.buildRagUserMessage(question, ragContexts)
 
+        val answerBuilder = StringBuilder()
         val streamResult = runCatching {
             engine.generateText(systemPrompt, userMessage)
-                .collect { token -> emit(RagToken.TextToken(token)) }
+                .collect { token ->
+                    answerBuilder.append(token)
+                    emit(RagToken.TextToken(token))
+                }
         }
 
         if (streamResult.isFailure) {
@@ -170,5 +183,45 @@ class RagChain @Inject constructor(
         // ── 7. Emit sources after all text tokens ─────────────────────────────
         emit(RagToken.Sources(budgeted))
 
+        // ── 8. Generate follow-up suggestions (best-effort) ───────────────────
+        val completedAnswer = answerBuilder.toString().trim()
+        if (completedAnswer.isNotBlank()) {
+            val suggestions = generateSuggestions(question, completedAnswer)
+            if (suggestions.isNotEmpty()) emit(RagToken.Suggestions(suggestions))
+        }
+
     }.flowOn(Dispatchers.IO)
+
+    // ── Private helpers ───────────────────────────────────────────────────────
+
+    /**
+     * Makes a second short LiteRT-LM call to produce 3 follow-up question suggestions.
+     * Returns an empty list on any failure (malformed JSON, timeout, etc.).
+     */
+    private suspend fun generateSuggestions(question: String, answer: String): List<String> {
+        val truncatedAnswer = answer.take(500)
+        val prompt = """
+            Based on this question: "$question"
+            And this answer: "$truncatedAnswer"
+            Generate exactly 3 short follow-up questions the user might ask next.
+            Respond ONLY with a JSON array of 3 strings. Max 8 words each.
+            Example: ["What is the late fee?", "Who do I contact?", "Can I pay online?"]
+        """.trimIndent()
+        return runCatching {
+            val raw = engine.generateText("", prompt).toList().joinToString("")
+            gson.fromJson(raw.cleanJson(), Array<String>::class.java).toList()
+        }.getOrDefault(emptyList())
+    }
+
+    /** Strips markdown code fences and extracts the first JSON array from raw model output. */
+    private fun String.cleanJson(): String {
+        val stripped = trimIndent()
+            .removePrefix("```json")
+            .removePrefix("```")
+            .removeSuffix("```")
+            .trim()
+        val start = stripped.indexOf('[')
+        val end   = stripped.lastIndexOf(']')
+        return if (start != -1 && end > start) stripped.substring(start, end + 1) else stripped
+    }
 }

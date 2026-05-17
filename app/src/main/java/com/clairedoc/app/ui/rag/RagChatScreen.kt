@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -33,6 +34,7 @@ import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.FindInPage
 import androidx.compose.material.icons.filled.RecordVoiceOver
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -175,6 +177,9 @@ fun RagChatScreen(
                     onSourceTapped = { source ->
                         val route = viewModel.getResultRouteForSource(source) ?: return@ChatContent
                         navController.navigate(route)
+                    },
+                    onSuggestionTapped = { suggestion ->
+                        viewModel.sendQuery(suggestion)
                     }
                 )
             }
@@ -284,7 +289,8 @@ private fun ChatContent(
     streamingText: String,
     isLoading: Boolean,
     paddingValues: PaddingValues,
-    onSourceTapped: (SourceReference) -> Unit
+    onSourceTapped: (SourceReference) -> Unit,
+    onSuggestionTapped: (String) -> Unit
 ) {
     val listState = rememberLazyListState()
 
@@ -321,6 +327,8 @@ private fun ChatContent(
             }
         }
     } else {
+        val lastAssistantMsgId = messages.lastOrNull { it.role == Role.ASSISTANT }?.id
+
         LazyColumn(
             state = listState,
             modifier = Modifier
@@ -330,7 +338,12 @@ private fun ChatContent(
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             items(messages, key = { it.id }) { msg ->
-                RagMessageBubble(message = msg, onSourceTapped = onSourceTapped)
+                RagMessageBubble(
+                    message = msg,
+                    isLastAssistantMessage = msg.id == lastAssistantMsgId && !isLoading,
+                    onSourceTapped = onSourceTapped,
+                    onSuggestionTapped = onSuggestionTapped
+                )
             }
 
             // Streaming / loading indicator
@@ -354,7 +367,9 @@ private fun ChatContent(
 @Composable
 private fun RagMessageBubble(
     message: RagMessage,
-    onSourceTapped: (SourceReference) -> Unit
+    isLastAssistantMessage: Boolean,
+    onSourceTapped: (SourceReference) -> Unit,
+    onSuggestionTapped: (String) -> Unit
 ) {
     val isUser = message.role == Role.USER
 
@@ -387,6 +402,15 @@ private fun RagMessageBubble(
         if (!isUser && message.sources.isNotEmpty()) {
             Spacer(Modifier.height(4.dp))
             SourcesCard(sources = message.sources, onSourceTapped = onSourceTapped)
+        }
+
+        // Suggestion chips — only for the most recent assistant message
+        if (!isUser && isLastAssistantMessage && message.suggestions.isNotEmpty()) {
+            Spacer(Modifier.height(8.dp))
+            SuggestionsRow(
+                suggestions = message.suggestions,
+                onSuggestionTapped = onSuggestionTapped
+            )
         }
 
         Spacer(Modifier.height(4.dp))
@@ -537,6 +561,29 @@ private fun SourceRow(source: SourceReference, onTapped: () -> Unit) {
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.padding(top = 2.dp)
+            )
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Suggestion chips
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun SuggestionsRow(
+    suggestions: List<String>,
+    onSuggestionTapped: (String) -> Unit
+) {
+    LazyRow(
+        contentPadding = PaddingValues(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        items(suggestions) { suggestion ->
+            AssistChip(
+                onClick = { onSuggestionTapped(suggestion) },
+                label = { Text(suggestion, style = MaterialTheme.typography.bodySmall) }
             )
         }
     }

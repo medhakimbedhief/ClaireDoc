@@ -35,7 +35,8 @@ data class RagMessage(
     val id: String = UUID.randomUUID().toString(),
     val role: Role,
     val content: String,
-    val sources: List<SourceReference> = emptyList()
+    val sources: List<SourceReference> = emptyList(),
+    val suggestions: List<String> = emptyList()
 )
 
 data class SourceReference(
@@ -134,16 +135,18 @@ class RagChatViewModel @Inject constructor(
             // 3 — Delegate the full RAG pipeline to RagChain
             var errorMsg: String? = null
             var sourcesChunks: List<RankedChunk> = emptyList()
+            var suggestionsQuestions: List<String> = emptyList()
             val sb = StringBuilder()
 
             ragChain.query(question).collect { token ->
                 when (token) {
-                    is RagToken.TextToken -> {
+                    is RagToken.TextToken   -> {
                         sb.append(token.text)
                         _streamingText.value = sb.toString()
                     }
-                    is RagToken.Sources -> sourcesChunks = token.chunks
-                    is RagToken.Error   -> errorMsg = token.message
+                    is RagToken.Sources     -> sourcesChunks = token.chunks
+                    is RagToken.Suggestions -> suggestionsQuestions = token.questions
+                    is RagToken.Error       -> errorMsg = token.message
                 }
             }
 
@@ -161,7 +164,8 @@ class RagChatViewModel @Inject constructor(
             val assistantMsg = RagMessage(
                 role = Role.ASSISTANT,
                 content = answer,
-                sources = sources
+                sources = sources,
+                suggestions = suggestionsQuestions
             )
             _messages.value = capHistory(_messages.value + assistantMsg)
         }
@@ -230,7 +234,12 @@ class RagChatViewModel @Inject constructor(
                     sessionId = rc.chunk.sessionId,
                     documentTitle = rc.chunk.documentTitle.ifBlank { session.documentType },
                     urgencyLevel = session.urgencyLevel,
-                    relevantSnippet = rc.chunk.text.take(200).trimEnd()
+                    // Prefer the first summary bullet (clean user-facing text) over
+                    // raw chunk text, which can leak prompt prefixes like "Document type:…"
+                    relevantSnippet = runCatching {
+                        session.toDocumentResult(gson).summary.firstOrNull()
+                            ?.takeIf { it.isNotBlank() }
+                    }.getOrNull() ?: rc.chunk.text.take(120).trimEnd()
                 )
             }
 
