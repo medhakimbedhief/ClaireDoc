@@ -76,6 +76,12 @@ class ResultViewModel @Inject constructor(
     private val _userTitle = MutableStateFlow<String?>(null)
     val userTitle: StateFlow<String?> = _userTitle.asStateFlow()
 
+    private val _imageUri = MutableStateFlow("")
+    val imageUri: StateFlow<String> = _imageUri.asStateFlow()
+
+    private val _sourceType = MutableStateFlow<SourceType?>(null)
+    val sourceType: StateFlow<SourceType?> = _sourceType.asStateFlow()
+
     private val _showConfetti = MutableStateFlow(false)
     val showConfetti: StateFlow<Boolean> = _showConfetti.asStateFlow()
 
@@ -97,6 +103,8 @@ class ResultViewModel @Inject constructor(
                         _chatMessages.value = parseChatHistory(session.chatHistoryJson)
                         _sessionStatus.value = session.status
                         _userTitle.value = session.userTitle
+                        _imageUri.value = session.imageUri
+                        _sourceType.value = session.sourceType
                     }
                 }
             }

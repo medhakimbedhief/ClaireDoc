@@ -32,6 +32,7 @@ hilt-navigation-compose = "1.2.0"
 litert = "2.1.0"
 objectbox = "5.4.2"
 work = "2.9.0"
+coil = "2.6.0"
 junit = "4.13.2"
 
 [libraries]
@@ -86,6 +87,9 @@ objectbox-kotlin = { group = "io.objectbox", name = "objectbox-kotlin", version.
 
 # WorkManager — background RAG indexing
 work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "work" }
+
+# Coil — image loading in Compose (document preview sheet)
+coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
 
 # Testing
 junit = { group = "junit", name = "junit", version.ref = "junit" }

@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.RecordVoiceOver
@@ -114,6 +115,7 @@ import androidx.compose.ui.text.AnnotatedString
 import com.clairedoc.app.actions.EmailDraft
 import com.clairedoc.app.data.model.Confidence
 import com.clairedoc.app.data.model.GlossaryTerm
+import com.clairedoc.app.data.model.SourceType
 
 @Suppress("UNUSED_PARAMETER")
 @OptIn(ExperimentalMaterial3Api::class)
@@ -131,6 +133,8 @@ fun ResultScreen(
     val isChatLoading by viewModel.isChatLoading.collectAsState()
     val sessionStatus by viewModel.sessionStatus.collectAsState()
     val userTitle by viewModel.userTitle.collectAsState()
+    val imageUri by viewModel.imageUri.collectAsState()
+    val sourceType by viewModel.sourceType.collectAsState()
     val showConfetti by viewModel.showConfetti.collectAsState()
     val emailUiState by emailViewModel.uiState.collectAsState()
     val emailAddresses by emailViewModel.emailAddresses.collectAsState()
@@ -241,6 +245,9 @@ fun ResultScreen(
                     },
                     onDone = { navController.popBackStack(NavRoutes.HOME, inclusive = false) },
                     context = context,
+                    imageUri = imageUri,
+                    sourceType = sourceType,
+                    sessionId = viewModel.sessionId,
                     emailAddresses = emailAddresses,
                     selectedEmail = selectedEmail,
                     emailUiState = emailUiState,
@@ -274,6 +281,9 @@ private fun ResultContent(
     onRetake: () -> Unit,
     onDone: () -> Unit,
     context: android.content.Context,
+    imageUri: String,
+    sourceType: SourceType?,
+    sessionId: String,
     emailAddresses: List<String>,
     selectedEmail: String,
     emailUiState: EmailDraftUiState,
@@ -284,7 +294,10 @@ private fun ResultContent(
     onResetDraft: () -> Unit
 ) {
     var selectedTerm by remember { mutableStateOf<GlossaryTerm?>(null) }
+    var showPreview by remember { mutableStateOf(false) }
     val clipboardManager = LocalClipboardManager.current
+
+    Box(modifier = Modifier.fillMaxSize()) {
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -295,6 +308,24 @@ private fun ResultContent(
         val confidence = result.confidence
         if (confidence != null && confidence != Confidence.HIGH) {
             item { ConfidenceBanner(confidence = confidence, onRetake = onRetake) }
+        }
+        if (imageUri.isNotBlank()) {
+            item {
+                OutlinedButton(
+                    onClick = { showPreview = true },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Image,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text("View scanned document")
+                }
+            }
         }
         item { Spacer(Modifier.height(12.dp)) }
         item {
@@ -391,10 +422,20 @@ private fun ResultContent(
                 Text("Done")
             }
         }
+    } // end LazyColumn
+
+    // Bottom sheets are placed outside the LazyColumn so they overlay the
+    // entire screen correctly and are not clipped by the list scroll.
+    if (showPreview) {
+        DocumentPreviewSheet(
+            imageUri = imageUri,
+            sourceType = sourceType,
+            sessionId = sessionId,
+            documentTitle = result.title.ifBlank { result.documentType },
+            onDismiss = { showPreview = false }
+        )
     }
 
-    // TermExplanationBottomSheet is shown outside the LazyColumn so it
-    // overlays the entire screen correctly and isn't clipped by the list.
     selectedTerm?.let { term ->
         TermExplanationBottomSheet(
             term = term,
@@ -402,6 +443,8 @@ private fun ResultContent(
             onDismiss = { selectedTerm = null }
         )
     }
+
+    } // end Box
 }
 
 // ─────────────────────────────────────────────────────────────

@@ -139,6 +139,9 @@ dependencies {
     // WorkManager — background RAG indexing (CoroutineWorker + unique-work enqueue)
     implementation(libs.work.runtime.ktx)
 
+    // Coil — async image loading for document preview sheet
+    implementation(libs.coil.compose)
+
     // JVM unit tests
     testImplementation(libs.junit)
 }

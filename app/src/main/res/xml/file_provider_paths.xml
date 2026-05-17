@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- qa_images/<sessionId>.jpg — permanent JPEG copy written at scan time -->
+    <files-path name="qa_images" path="qa_images/" />
+    <!-- cache dir — fallback temp copies when sharing content:// URIs -->
+    <cache-path name="cache" path="." />
+</paths>
