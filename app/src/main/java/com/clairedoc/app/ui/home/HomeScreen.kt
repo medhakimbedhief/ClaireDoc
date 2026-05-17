@@ -80,9 +80,13 @@ import com.clairedoc.app.data.model.SourceType
 import com.clairedoc.app.data.model.UrgencyLevel
 import com.clairedoc.app.ui.NavRoutes
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.Date
+import java.util.Locale
+import java.util.concurrent.TimeUnit
 
 private val URGENCY_STRIP_COLORS = mapOf(
     UrgencyLevel.RED    to Color(0xFFD32F2F),
@@ -425,42 +429,12 @@ private fun DocumentCard(
                     .fillMaxHeight()
                     .background(color = stripColor)
             )
+            // ── Content: title / PDF badge / description / deadline chip ─────
             Column(
                 modifier = Modifier
                     .weight(1f)
                     .padding(12.dp)
             ) {
-                // Status badge + indexing indicator — document type label removed (redundant)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        // Indexing state indicator — hidden once the session is indexed
-                        if (!item.isIndexed) {
-                            if (isIndexingActive) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(12.dp),
-                                    strokeWidth = 1.5.dp,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            } else {
-                                Icon(
-                                    imageVector = Icons.Default.Warning,
-                                    contentDescription = "Not yet indexed for chat",
-                                    tint = Color(0xFFF57C00),
-                                    modifier = Modifier.size(14.dp)
-                                )
-                            }
-                        }
-                        StatusBadge(status = item.session.status)
-                    }
-                }
-                Spacer(Modifier.height(2.dp))
                 Text(
                     text = item.session.displayTitle,
                     style = MaterialTheme.typography.titleSmall,
@@ -514,6 +488,45 @@ private fun DocumentCard(
                         )
                     }
                 }
+            }
+            // ── Right side: status badge + indexing indicator + scan date ─────
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier
+                    .align(Alignment.Top)
+                    .padding(top = 12.dp, end = 12.dp, bottom = 12.dp, start = 8.dp)
+            ) {
+                // Indexing state indicator + status badge (top)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    if (!item.isIndexed) {
+                        if (isIndexingActive) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(12.dp),
+                                strokeWidth = 1.5.dp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Warning,
+                                contentDescription = "Not yet indexed for chat",
+                                tint = Color(0xFFF57C00),
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
+                    }
+                    StatusBadge(status = item.session.status)
+                }
+                // Scan date (below badge, muted)
+                Text(
+                    text = item.session.createdAt.toRelativeDate(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                    modifier = Modifier.padding(top = 4.dp)
+                )
             }
         }
     }
@@ -627,6 +640,25 @@ private fun EmptyHomeContent(modifier: Modifier = Modifier) {
 // ─────────────────────────────────────────────────────────────
 
 private val DISPLAY_DATE_FMT = DateTimeFormatter.ofPattern("d MMM yyyy")
+
+/**
+ * Converts an epoch-millis timestamp to a compact relative string for card display.
+ * Examples: "Just now", "5m ago", "3h ago", "Yesterday", "4d ago", "2w ago", "12 Jan"
+ */
+private fun Long.toRelativeDate(): String {
+    val diff = System.currentTimeMillis() - this
+    val days = TimeUnit.MILLISECONDS.toDays(diff)
+    return when {
+        diff < TimeUnit.MINUTES.toMillis(1)  -> "Just now"
+        diff < TimeUnit.HOURS.toMillis(1)    -> "${TimeUnit.MILLISECONDS.toMinutes(diff)}m ago"
+        diff < TimeUnit.HOURS.toMillis(24)   -> "${TimeUnit.MILLISECONDS.toHours(diff)}h ago"
+        days == 1L                           -> "Yesterday"
+        days < 7                             -> "${days}d ago"
+        days < 30                            -> "${days / 7}w ago"
+        else                                 -> SimpleDateFormat("d MMM", Locale.getDefault())
+                                                    .format(Date(this))
+    }
+}
 
 private fun relativeTime(epochMs: Long): String {
     val diffMin = (System.currentTimeMillis() - epochMs) / 60_000
