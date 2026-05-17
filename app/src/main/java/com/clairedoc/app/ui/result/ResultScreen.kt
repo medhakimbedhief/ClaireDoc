@@ -509,12 +509,11 @@ private fun QuickActionButtons(
             .padding(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        Button(
-            onClick = onMarkDone,
-            enabled = status != SessionStatus.DONE,
+        FilledTonalButton(
+            onClick = onRemindMe,
             modifier = Modifier.weight(1f)
         ) {
-            Text("Done", maxLines = 1, style = MaterialTheme.typography.labelSmall)
+            Text("Remind me", maxLines = 1, style = MaterialTheme.typography.labelSmall)
         }
         FilledTonalButton(
             onClick = onHandlingIt,
@@ -523,11 +522,12 @@ private fun QuickActionButtons(
         ) {
             Text("Handling it", maxLines = 1, style = MaterialTheme.typography.labelSmall)
         }
-        FilledTonalButton(
-            onClick = onRemindMe,
+        Button(
+            onClick = onMarkDone,
+            enabled = status != SessionStatus.DONE,
             modifier = Modifier.weight(1f)
         ) {
-            Text("Remind me", maxLines = 1, style = MaterialTheme.typography.labelSmall)
+            Text("Done", maxLines = 1, style = MaterialTheme.typography.labelSmall)
         }
     }
 }
