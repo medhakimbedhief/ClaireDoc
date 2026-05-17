@@ -8,12 +8,20 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [DocumentSession::class],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 @TypeConverters(DocumentSessionConverters::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun documentSessionDao(): DocumentSessionDao
+}
+
+val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(database: SupportSQLiteDatabase) {
+        database.execSQL(
+            "ALTER TABLE document_sessions ADD COLUMN aiTitle TEXT NOT NULL DEFAULT ''"
+        )
+    }
 }
 
 /**

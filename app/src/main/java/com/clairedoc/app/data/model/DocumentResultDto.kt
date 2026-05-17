@@ -32,6 +32,7 @@ data class GlossaryTermDto(
 
 data class DocumentResultDto(
     val documentType: String?,
+    val title: String? = null,
     val summary: List<String?>?,
     val actions: List<ActionItemDto?>?,
     val risks: List<String?>?,
@@ -75,6 +76,15 @@ fun DocumentResultDto.toDomain(): DocumentResult {
 
     return DocumentResult(
         documentType = docType,
+        title = run {
+            val raw = title?.trim().orEmpty()
+            val truncated = if (raw.length > 60)
+                raw.take(60).substringBeforeLast(' ').ifBlank { raw.take(60) }
+            else raw
+            truncated.ifBlank {
+                docType.replace("_", " ").lowercase().replaceFirstChar { it.uppercase() }
+            }
+        },
         summary = summary
             ?.filterNotNull()
             ?.filter { it.isNotBlank() }

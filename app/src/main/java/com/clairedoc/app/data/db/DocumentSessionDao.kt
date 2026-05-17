@@ -37,4 +37,7 @@ interface DocumentSessionDao {
 
     @Query("UPDATE document_sessions SET chatHistoryJson = :historyJson, updatedAt = :updatedAt WHERE id = :id")
     suspend fun updateChatHistory(id: String, historyJson: String, updatedAt: Long)
+
+    @Query("UPDATE document_sessions SET userTitle = NULL, updatedAt = :updatedAt WHERE id = :id")
+    suspend fun clearUserTitle(id: String, updatedAt: Long)
 }

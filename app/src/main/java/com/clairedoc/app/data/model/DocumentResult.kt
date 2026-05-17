@@ -46,6 +46,7 @@ data class DocumentResult(
     val actions: List<ActionItem>,      // extracted obligations, each with optional deadline
     val risks: List<String>,            // warnings / red-flag sentences
     val urgencyLevel: UrgencyLevel,     // RED | YELLOW | GREEN
+    val title: String = "",             // AI-generated short title (3–6 words); "" for old stored sessions
 
     // v2 enrichment fields — all nullable so old stored JSON deserialised by Gson
     // (which bypasses constructor defaults via Unsafe) never causes NPE.

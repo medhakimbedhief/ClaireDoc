@@ -29,7 +29,8 @@ fun DocumentResult.toDocumentSession(
     pageCount = pageCount,
     // Persist the complete result so that navigating back from Home or RAG sources
     // restores all v2 fields (contacts, glossaryTerms, confidence, sender, detectedLanguage).
-    fullResultJson = gson.toJson(this)
+    fullResultJson = gson.toJson(this),
+    aiTitle = title
 )
 
 /**
@@ -44,7 +45,15 @@ fun DocumentResult.toDocumentSession(
 fun DocumentSession.toDocumentResult(gson: Gson): DocumentResult {
     if (fullResultJson.isNotBlank()) {
         return runCatching { gson.fromJson(fullResultJson, DocumentResult::class.java) }
-            .getOrNull() ?: buildLegacyResult(gson)
+            .getOrNull()
+            ?.let { result ->
+                // `title` may be null for sessions serialised before this field existed —
+                // Gson uses Unsafe and bypasses constructor defaults.
+                val safeTitle = runCatching { result.title.takeIf { it.isNotBlank() } }.getOrNull()
+                if (safeTitle != null) result
+                else result.copy(title = aiTitle.ifBlank { humanizeDocType(documentType) })
+            }
+            ?: buildLegacyResult(gson)
     }
     return buildLegacyResult(gson)
 }
@@ -54,9 +63,14 @@ private fun DocumentSession.buildLegacyResult(gson: Gson): DocumentResult {
     val listActionType = object : TypeToken<List<ActionItem>>() {}.type
     return DocumentResult(
         documentType = documentType,
+        title = aiTitle.ifBlank { humanizeDocType(documentType) },
         summary = gson.fromJson(summaryJson, listStringType),
         actions = gson.fromJson(actionsJson, listActionType),
         risks = gson.fromJson(risksJson, listStringType),
         urgencyLevel = UrgencyLevel.valueOf(urgencyLevel)
     )
 }
+
+private fun humanizeDocType(type: String): String =
+    type.replace("_", " ").lowercase().replaceFirstChar { it.uppercase() }
+        .ifBlank { "Scanned Document" }

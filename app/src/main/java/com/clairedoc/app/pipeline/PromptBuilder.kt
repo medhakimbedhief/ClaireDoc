@@ -123,6 +123,7 @@ Respond ONLY with a valid JSON object. No explanation, no markdown fences, no pr
 Use this exact schema:
 {
   "documentType": "BILL|CONTRACT|LEGAL_NOTICE|MEDICAL|TAX|INSURANCE|BANK|VISA_IMMIGRATION|GOVERNMENT_NOTICE|RENTAL|OTHER",
+  "title": "short human-readable title for this document",
   "sender": {"name": "sender name or null", "department": "department or null"},
   "detectedLanguage": "ISO 639-1 code, e.g. en",
   "confidence": "HIGH|MEDIUM|LOW",
@@ -152,6 +153,11 @@ Rules:
 - glossaryTerms: include every legal, medical, financial or administrative term found in the document
 - contacts: include every email, phone number, postal address and website found
 - sender: name of the organisation or person who sent the document; department if visible
-- detectedLanguage: ISO 639-1 code of the document's written language"""
+- detectedLanguage: ISO 639-1 code of the document's written language
+- title: 3 to 6 words maximum. Specific, not generic.
+- Good title examples: "Finanzamt Tax Notice May 2025", "Stadtwerke Water Bill April", "Rental Contract Hauptstraße 12", "Health Insurance Card Renewal"
+- Bad title examples: "Official Document", "Letter", "Bill"
+- Include the sender name and/or month/year if visible in the document.
+- Write the title in the same language as the document."""
     }
 }

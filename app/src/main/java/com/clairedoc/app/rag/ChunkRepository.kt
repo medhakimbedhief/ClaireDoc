@@ -49,7 +49,7 @@ class ChunkRepository @Inject constructor(
         val textChunks = Chunker.chunk(fullText)
         Log.d(TAG, "Indexing session ${session.id}: ${textChunks.size} chunk(s)")
 
-        val title = session.userTitle ?: session.documentType
+        val title = session.displayTitle
         val entities = textChunks.mapIndexed { idx, chunkText ->
             DocumentChunk(
                 sessionId = session.id,
@@ -192,6 +192,7 @@ class ChunkRepository @Inject constructor(
             .trim()
 
         return buildString {
+            append("Title: ${session.displayTitle}\n")
             append("Document type: ${session.documentType}.\n")
             append(cleanJson(session.summaryJson))
             append("\n")

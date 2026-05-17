@@ -167,7 +167,10 @@ class HomeViewModel @Inject constructor(
     }
 
     fun renameSession(id: String, title: String) {
-        viewModelScope.launch { repository.renameSession(id, title) }
+        viewModelScope.launch {
+            if (title.isBlank()) repository.clearUserTitle(id)
+            else repository.renameSession(id, title.trim())
+        }
     }
 
     fun archiveSession(id: String) {

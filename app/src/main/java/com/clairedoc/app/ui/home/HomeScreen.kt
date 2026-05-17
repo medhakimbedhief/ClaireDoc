@@ -191,8 +191,7 @@ fun HomeScreen(
                         .padding(bottom = 24.dp)
                 ) {
                     Text(
-                        text = item.session.userTitle
-                            ?: item.session.documentType.replace("_", " "),
+                        text = item.session.displayTitle,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp)
@@ -201,7 +200,7 @@ fun HomeScreen(
                         icon = Icons.Default.DriveFileRenameOutline,
                         label = "Rename",
                         onClick = {
-                            renameText = item.session.userTitle ?: ""
+                            renameText = item.session.displayTitle
                             scope.launch { sheetState.hide() }
                             showSheet = false
                             showRenameDialog = true
@@ -279,7 +278,8 @@ fun HomeScreen(
             },
             confirmButton = {
                 TextButton(onClick = {
-                    if (item != null && renameText.isNotBlank()) {
+                    // Blank string clears userTitle → reverts to AI-generated title
+                    if (item != null) {
                         viewModel.renameSession(item.session.id, renameText.trim())
                     }
                     showRenameDialog = false
@@ -388,7 +388,7 @@ private fun DocumentCard(
                 }
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text = item.session.userTitle ?: relativeTime(item.session.createdAt),
+                    text = item.session.displayTitle,
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,

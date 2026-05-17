@@ -136,8 +136,13 @@ fun ResultScreen(
     val emailAddresses by emailViewModel.emailAddresses.collectAsState()
     val selectedEmail by emailViewModel.selectedEmail.collectAsState()
 
+    // displayTitle: user-set title → AI title → "Document"
+    val displayTitle = userTitle?.takeIf { it.isNotBlank() }
+        ?: result?.title?.takeIf { it.isNotBlank() }
+        ?: "Document"
+
     var isEditingTitle by remember { mutableStateOf(false) }
-    var editTitleText by remember(userTitle) { mutableStateOf(userTitle ?: "") }
+    var editTitleText by remember(userTitle, result) { mutableStateOf(displayTitle) }
     var showOverflowMenu by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
@@ -154,16 +159,15 @@ fun ResultScreen(
                                 singleLine = true,
                                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                                 keyboardActions = KeyboardActions(onDone = {
-                                    if (editTitleText.isNotBlank()) {
-                                        viewModel.renameSession(editTitleText.trim())
-                                    }
+                                    // blank → clears userTitle → reverts to AI title
+                                    viewModel.renameSession(editTitleText.trim())
                                     isEditingTitle = false
                                 }),
                                 modifier = Modifier.fillMaxWidth()
                             )
                         } else {
                             Text(
-                                text = userTitle ?: "Document",
+                                text = displayTitle,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -180,7 +184,7 @@ fun ResultScreen(
                     actions = {
                         if (!isEditingTitle) {
                             IconButton(onClick = {
-                                editTitleText = userTitle ?: ""
+                                editTitleText = displayTitle
                                 isEditingTitle = true
                             }) {
                                 Icon(

@@ -64,4 +64,8 @@ class DocumentSessionRepository @Inject constructor(
         val json = gson.toJson(messages)
         dao.updateChatHistory(id, json, System.currentTimeMillis())
     }
+
+    /** Clears the user-supplied title, reverting the UI to the AI-generated [DocumentSession.aiTitle]. */
+    suspend fun clearUserTitle(id: String) =
+        dao.clearUserTitle(id, System.currentTimeMillis())
 }

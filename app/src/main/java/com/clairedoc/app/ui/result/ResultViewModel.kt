@@ -212,8 +212,12 @@ class ResultViewModel @Inject constructor(
     }
 
     fun renameSession(title: String) {
-        if (sessionId.isBlank() || title.isBlank()) return
-        viewModelScope.launch { repository.renameSession(sessionId, title) }
+        if (sessionId.isBlank()) return
+        viewModelScope.launch {
+            // Blank string clears userTitle → UI reverts to AI-generated title
+            if (title.isBlank()) repository.clearUserTitle(sessionId)
+            else repository.renameSession(sessionId, title)
+        }
     }
 
     fun dismissConfetti() { _showConfetti.value = false }

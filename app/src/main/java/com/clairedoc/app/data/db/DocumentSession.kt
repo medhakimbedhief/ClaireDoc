@@ -30,5 +30,24 @@ data class DocumentSession(
      * that are NOT stored individually. Empty string for sessions saved before this column
      * was added (migration 4→5) — [toDocumentResult] falls back gracefully in that case.
      */
-    val fullResultJson: String = ""
-)
+    val fullResultJson: String = "",
+    /**
+     * AI-generated short title (3–6 words) produced by the model at scan time.
+     * Empty string for sessions saved before migration 5→6 — [displayTitle] falls back to
+     * [documentType] for those rows.
+     * UI should always use [displayTitle], never this field directly.
+     */
+    val aiTitle: String = ""
+) {
+    /**
+     * The title to show everywhere in the UI.
+     * Priority: user-set title → AI title → humanised document type → "Scanned Document".
+     */
+    val displayTitle: String
+        get() = userTitle?.takeIf { it.isNotBlank() }
+            ?: aiTitle.ifBlank {
+                documentType.replace("_", " ").lowercase()
+                    .replaceFirstChar { it.uppercase() }
+                    .ifBlank { "Scanned Document" }
+            }
+}
