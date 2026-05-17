@@ -148,6 +148,7 @@ fun ResultScreen(
     var isEditingTitle by remember { mutableStateOf(false) }
     var editTitleText by remember(userTitle, result) { mutableStateOf(displayTitle) }
     var showOverflowMenu by remember { mutableStateOf(false) }
+    var showPreview by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
 
@@ -195,6 +196,14 @@ fun ResultScreen(
                                     imageVector = Icons.Default.Edit,
                                     contentDescription = "Rename"
                                 )
+                            }
+                            if (imageUri.isNotBlank()) {
+                                IconButton(onClick = { showPreview = true }) {
+                                    Icon(
+                                        imageVector = Icons.Default.Image,
+                                        contentDescription = "View scanned document"
+                                    )
+                                }
                             }
                             Box {
                                 IconButton(onClick = { showOverflowMenu = true }) {
@@ -248,6 +257,8 @@ fun ResultScreen(
                     imageUri = imageUri,
                     sourceType = sourceType,
                     sessionId = viewModel.sessionId,
+                    showPreview = showPreview,
+                    onDismissPreview = { showPreview = false },
                     emailAddresses = emailAddresses,
                     selectedEmail = selectedEmail,
                     emailUiState = emailUiState,
@@ -284,6 +295,8 @@ private fun ResultContent(
     imageUri: String,
     sourceType: SourceType?,
     sessionId: String,
+    showPreview: Boolean,
+    onDismissPreview: () -> Unit,
     emailAddresses: List<String>,
     selectedEmail: String,
     emailUiState: EmailDraftUiState,
@@ -294,7 +307,6 @@ private fun ResultContent(
     onResetDraft: () -> Unit
 ) {
     var selectedTerm by remember { mutableStateOf<GlossaryTerm?>(null) }
-    var showPreview by remember { mutableStateOf(false) }
     val clipboardManager = LocalClipboardManager.current
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -308,24 +320,6 @@ private fun ResultContent(
         val confidence = result.confidence
         if (confidence != null && confidence != Confidence.HIGH) {
             item { ConfidenceBanner(confidence = confidence, onRetake = onRetake) }
-        }
-        if (imageUri.isNotBlank()) {
-            item {
-                OutlinedButton(
-                    onClick = { showPreview = true },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 4.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Image,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text("View scanned document")
-                }
-            }
         }
         item { Spacer(Modifier.height(12.dp)) }
         item {
@@ -432,7 +426,7 @@ private fun ResultContent(
             sourceType = sourceType,
             sessionId = sessionId,
             documentTitle = result.title.ifBlank { result.documentType },
-            onDismiss = { showPreview = false }
+            onDismiss = onDismissPreview
         )
     }
 
