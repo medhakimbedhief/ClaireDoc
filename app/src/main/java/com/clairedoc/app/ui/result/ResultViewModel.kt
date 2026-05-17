@@ -230,6 +230,12 @@ class ResultViewModel @Inject constructor(
 
     fun dismissConfetti() { _showConfetti.value = false }
 
+    /** Updates the document type for this session (user-driven reclassification). */
+    fun changeDocumentType(newType: String) {
+        if (sessionId.isBlank()) return
+        viewModelScope.launch { repository.updateDocumentType(sessionId, newType) }
+    }
+
     /**
      * Deletes the current session from Room if its status is still UNREAD.
      * Fire-and-forget: navigation should happen immediately after calling this;

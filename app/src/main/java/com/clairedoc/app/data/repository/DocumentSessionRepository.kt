@@ -68,4 +68,8 @@ class DocumentSessionRepository @Inject constructor(
     /** Clears the user-supplied title, reverting the UI to the AI-generated [DocumentSession.aiTitle]. */
     suspend fun clearUserTitle(id: String) =
         dao.clearUserTitle(id, System.currentTimeMillis())
+
+    /** Updates the document type for an existing session (user-driven reclassification). */
+    suspend fun updateDocumentType(id: String, documentType: String) =
+        dao.updateDocumentType(id, documentType, System.currentTimeMillis())
 }

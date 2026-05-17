@@ -207,6 +207,10 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    fun updateDocumentType(id: String, documentType: String) {
+        viewModelScope.launch { repository.updateDocumentType(id, documentType) }
+    }
+
     fun archiveSession(id: String) {
         viewModelScope.launch { repository.archiveSession(id) }
     }

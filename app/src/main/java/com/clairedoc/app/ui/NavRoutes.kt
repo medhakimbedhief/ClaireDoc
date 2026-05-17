@@ -9,8 +9,13 @@ object NavRoutes {
     const val SCAN = "scan"
     const val RAG_CHAT = "rag_chat"
     const val SETTINGS  = "settings"
+    const val CATEGORIES = "categories"
+    const val CATEGORY_DETAIL = "category/{documentType}"
     const val RESULT = "result/{resultJson}/{sessionId}"
 
     fun resultRoute(json: String, sessionId: String): String =
         "result/${Uri.encode(json)}/${Uri.encode(sessionId)}"
+
+    fun categoryDetailRoute(documentType: String): String =
+        "category/${Uri.encode(documentType)}"
 }

@@ -119,6 +119,7 @@ import com.clairedoc.app.actions.EmailDraft
 import com.clairedoc.app.data.model.Confidence
 import com.clairedoc.app.data.model.GlossaryTerm
 import com.clairedoc.app.data.model.SourceType
+import com.clairedoc.app.ui.categories.ChangeTypeBottomSheet
 
 @Suppress("UNUSED_PARAMETER")
 @OptIn(ExperimentalMaterial3Api::class)
@@ -152,6 +153,7 @@ fun ResultScreen(
     var editTitleText by remember(userTitle, result) { mutableStateOf(displayTitle) }
     var showOverflowMenu by remember { mutableStateOf(false) }
     var showPreview by remember { mutableStateOf(false) }
+    var showChangeTypeSheet by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
 
@@ -227,6 +229,13 @@ fun ResultScreen(
                                         }
                                     )
                                     DropdownMenuItem(
+                                        text = { Text("Change document type") },
+                                        onClick = {
+                                            showOverflowMenu = false
+                                            showChangeTypeSheet = true
+                                        }
+                                    )
+                                    DropdownMenuItem(
                                         text = { Text("Retake document") },
                                         onClick = {
                                             showOverflowMenu = false
@@ -284,6 +293,14 @@ fun ResultScreen(
         if (showConfetti) {
             ConfettiOverlay(onEnd = viewModel::dismissConfetti)
         }
+    }
+
+    if (showChangeTypeSheet) {
+        ChangeTypeBottomSheet(
+            currentType = result?.documentType ?: "",
+            onTypeSelected = viewModel::changeDocumentType,
+            onDismiss = { showChangeTypeSheet = false }
+        )
     }
 }
 

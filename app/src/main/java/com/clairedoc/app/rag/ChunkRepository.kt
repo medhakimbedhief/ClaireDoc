@@ -142,6 +142,12 @@ class ChunkRepository @Inject constructor(
         box.query(DocumentChunk_.sessionId.equal(sessionId)).build().count() > 0
 
     /**
+     * Returns the total number of indexed chunks across all sessions.
+     * Synchronous — safe to call from any thread.
+     */
+    fun getTotalChunkCount(): Int = box.count().toInt()
+
+    /**
      * True when the TFLite embedder model file is present on disk.
      * Synchronous — safe to call from any thread.
      */

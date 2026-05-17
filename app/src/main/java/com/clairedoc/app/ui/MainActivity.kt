@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -25,6 +26,8 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.clairedoc.app.engine.LiteRTEngine
+import com.clairedoc.app.ui.categories.CategoriesScreen
+import com.clairedoc.app.ui.categories.FilteredCategoryScreen
 import com.clairedoc.app.ui.home.HomeScreen
 import com.clairedoc.app.ui.model.ModelManagerScreen
 import com.clairedoc.app.ui.rag.RagChatScreen
@@ -42,9 +45,10 @@ private data class BottomTab(
 )
 
 private val BOTTOM_TABS = listOf(
-    BottomTab(NavRoutes.HOME,     "Documents", Icons.Default.Description),
-    BottomTab(NavRoutes.RAG_CHAT, "Ask",       Icons.Default.Chat),
-    BottomTab(NavRoutes.SETTINGS, "Settings",  Icons.Default.Settings)
+    BottomTab(NavRoutes.HOME,       "Documents",  Icons.Default.Description),
+    BottomTab(NavRoutes.CATEGORIES, "Categories", Icons.Default.GridView),
+    BottomTab(NavRoutes.RAG_CHAT,   "Ask",        Icons.Default.Chat),
+    BottomTab(NavRoutes.SETTINGS,   "Settings",   Icons.Default.Settings)
 )
 
 @AndroidEntryPoint
@@ -96,6 +100,10 @@ class MainActivity : ComponentActivity() {
                             HomeScreen(navController = navController)
                         }
 
+                        composable(NavRoutes.CATEGORIES) {
+                            CategoriesScreen(navController = navController)
+                        }
+
                         composable(NavRoutes.RAG_CHAT) {
                             RagChatScreen(navController = navController)
                         }
@@ -107,6 +115,15 @@ class MainActivity : ComponentActivity() {
                         // ── Modal / push destinations (no bottom nav) ──────────
                         composable(NavRoutes.SCAN) {
                             ScanScreen(navController = navController)
+                        }
+
+                        composable(
+                            route = NavRoutes.CATEGORY_DETAIL,
+                            arguments = listOf(
+                                navArgument("documentType") { type = NavType.StringType }
+                            )
+                        ) {
+                            FilteredCategoryScreen(navController = navController)
                         }
 
                         composable(

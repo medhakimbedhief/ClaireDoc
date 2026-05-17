@@ -40,4 +40,7 @@ interface DocumentSessionDao {
 
     @Query("UPDATE document_sessions SET userTitle = NULL, updatedAt = :updatedAt WHERE id = :id")
     suspend fun clearUserTitle(id: String, updatedAt: Long)
+
+    @Query("UPDATE document_sessions SET documentType = :documentType, updatedAt = :updatedAt WHERE id = :id")
+    suspend fun updateDocumentType(id: String, documentType: String, updatedAt: Long)
 }

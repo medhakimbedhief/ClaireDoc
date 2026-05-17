@@ -26,6 +26,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddAPhoto
 import androidx.compose.material.icons.filled.Archive
+import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Delete
@@ -79,6 +80,7 @@ import com.clairedoc.app.data.model.SessionStatus
 import com.clairedoc.app.data.model.SourceType
 import com.clairedoc.app.data.model.UrgencyLevel
 import com.clairedoc.app.ui.NavRoutes
+import com.clairedoc.app.ui.categories.ChangeTypeBottomSheet
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.time.Instant
@@ -108,6 +110,7 @@ fun HomeScreen(
     var showSheet by remember { mutableStateOf(false) }
     var showRenameDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var showChangeTypeSheet by remember { mutableStateOf(false) }
     var renameText by remember { mutableStateOf("") }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
@@ -288,6 +291,15 @@ fun HomeScreen(
                             showRenameDialog = true
                         }
                     )
+                    SheetAction(
+                        icon = Icons.Default.Category,
+                        label = "Change type",
+                        onClick = {
+                            scope.launch { sheetState.hide() }
+                            showSheet = false
+                            showChangeTypeSheet = true
+                        }
+                    )
                     if (item.session.status != SessionStatus.DONE) {
                         SheetAction(
                             icon = Icons.Default.TaskAlt,
@@ -398,6 +410,22 @@ fun HomeScreen(
             }
         )
     }
+
+    if (showChangeTypeSheet) {
+        val item = selectedItem
+        if (item != null) {
+            ChangeTypeBottomSheet(
+                currentType = item.session.documentType,
+                onTypeSelected = { newType ->
+                    viewModel.updateDocumentType(item.session.id, newType)
+                },
+                onDismiss = {
+                    showChangeTypeSheet = false
+                    selectedItem = null
+                }
+            )
+        }
+    }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -406,7 +434,7 @@ fun HomeScreen(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun DocumentCard(
+fun DocumentCard(
     item: HomeSessionItem,
     isIndexingActive: Boolean,
     onClick: () -> Unit,
