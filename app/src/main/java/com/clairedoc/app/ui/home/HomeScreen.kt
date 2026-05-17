@@ -28,9 +28,12 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DocumentScanner
 import androidx.compose.material.icons.filled.DriveFileRenameOutline
 import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.TaskAlt
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
@@ -86,6 +89,7 @@ fun HomeScreen(
     viewModel: HomeViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val isIndexingActive by viewModel.isIndexingActive.collectAsState()
     var selectedItem by remember { mutableStateOf<HomeSessionItem?>(null) }
     var showSheet by remember { mutableStateOf(false) }
     var showRenameDialog by remember { mutableStateOf(false) }
@@ -153,6 +157,7 @@ fun HomeScreen(
                         items(items = group, key = { it.session.id }) { item ->
                             DocumentCard(
                                 item = item,
+                                isIndexingActive = isIndexingActive,
                                 onClick = {
                                     navController.navigate(
                                         NavRoutes.resultRoute(item.resultJson, item.session.id)
@@ -235,6 +240,16 @@ fun HomeScreen(
                         }
                     )
                     SheetAction(
+                        icon = Icons.Default.Refresh,
+                        label = "Re-index for Chat",
+                        onClick = {
+                            viewModel.reIndexSession(item.session.id)
+                            scope.launch { sheetState.hide() }
+                            showSheet = false
+                            selectedItem = null
+                        }
+                    )
+                    SheetAction(
                         icon = Icons.Default.Delete,
                         label = "Delete",
                         tint = MaterialTheme.colorScheme.error,
@@ -311,6 +326,7 @@ fun HomeScreen(
 @Composable
 private fun DocumentCard(
     item: HomeSessionItem,
+    isIndexingActive: Boolean,
     onClick: () -> Unit,
     onLongClick: () -> Unit
 ) {
@@ -346,7 +362,29 @@ private fun DocumentCard(
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    StatusBadge(status = item.session.status)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        // Indexing state indicator — hidden once the session is indexed
+                        if (!item.isIndexed) {
+                            if (isIndexingActive) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(12.dp),
+                                    strokeWidth = 1.5.dp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.Warning,
+                                    contentDescription = "Not yet indexed for chat",
+                                    tint = Color(0xFFF57C00),
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+                        }
+                        StatusBadge(status = item.session.status)
+                    }
                 }
                 Spacer(Modifier.height(4.dp))
                 Text(

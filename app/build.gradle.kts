@@ -136,6 +136,9 @@ dependencies {
     // Note: no ksp()/kapt() needed — the io.objectbox plugin registers its KAPT processor
     // automatically via kaptDebugKotlin, which generates MyObjectBox + DocumentChunk_.
 
+    // WorkManager — background RAG indexing (CoroutineWorker + unique-work enqueue)
+    implementation(libs.work.runtime.ktx)
+
     // JVM unit tests
     testImplementation(libs.junit)
 }

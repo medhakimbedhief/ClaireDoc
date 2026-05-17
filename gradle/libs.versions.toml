@@ -31,6 +31,7 @@ hilt-navigation-compose = "1.2.0"
 # RAG layer
 litert = "2.1.0"
 objectbox = "5.4.2"
+work = "2.9.0"
 junit = "4.13.2"
 
 [libraries]
@@ -82,6 +83,9 @@ litert = { group = "com.google.ai.edge.litert", name = "litert", version.ref = "
 objectbox-android = { group = "io.objectbox", name = "objectbox-android", version.ref = "objectbox" }
 objectbox-kotlin = { group = "io.objectbox", name = "objectbox-kotlin", version.ref = "objectbox" }
 # objectbox-processor is handled automatically by the io.objectbox Gradle plugin (KAPT path).
+
+# WorkManager — background RAG indexing
+work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "work" }
 
 # Testing
 junit = { group = "junit", name = "junit", version.ref = "junit" }

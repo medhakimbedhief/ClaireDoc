@@ -2,6 +2,8 @@ package com.clairedoc.app.rag
 
 import android.util.Log
 import com.clairedoc.app.data.db.DocumentSession
+import com.clairedoc.app.data.model.DocumentResult
+import com.google.gson.Gson
 import io.objectbox.BoxStore
 import io.objectbox.kotlin.boxFor
 import kotlinx.coroutines.Dispatchers
@@ -28,7 +30,8 @@ data class RankedChunk(val chunk: DocumentChunk, val score: Double)
 @Singleton
 class ChunkRepository @Inject constructor(
     private val store: BoxStore,
-    private val embeddingEngine: EmbeddingEngine
+    private val embeddingEngine: EmbeddingEngine,
+    private val gson: Gson
 ) {
     private val box get() = store.boxFor<DocumentChunk>()
 
@@ -138,15 +141,49 @@ class ChunkRepository @Inject constructor(
     fun isIndexed(sessionId: String): Boolean =
         box.query(DocumentChunk_.sessionId.equal(sessionId)).build().count() > 0
 
+    /**
+     * True when the TFLite embedder model file is present on disk.
+     * Synchronous — safe to call from any thread.
+     */
+    fun isEmbedderReady(): Boolean = embeddingEngine.isModelReady()
+
     // ── Private helpers ───────────────────────────────────────────────────────
 
     /**
-     * Builds a plain-text corpus from the session's JSON fields.
+     * Builds a plain-text corpus from the session for chunking and embedding.
      *
-     * JSON array brackets, quotes, and commas are stripped so the chunker
-     * sees natural prose rather than raw JSON syntax.
+     * Prefers [DocumentSession.fullResultJson] (added in migration 4→5) which contains
+     * all v2 fields — glossary terms, sender, contacts — giving the embedder richer
+     * semantic signal. Falls back to stripping the individual JSON columns for legacy rows.
      */
     private fun buildSessionText(session: DocumentSession): String {
+        // Prefer full result JSON — includes v2 fields (glossary, sender, contacts)
+        if (session.fullResultJson.isNotBlank()) {
+            runCatching {
+                val result = gson.fromJson(session.fullResultJson, DocumentResult::class.java)
+                return buildString {
+                    append("Document type: ${result.documentType}.\n")
+                    result.summary.forEach { append("$it\n") }
+                    result.actions.forEach { a ->
+                        append(a.description)
+                        a.deadline?.let { append(" (deadline: $it)") }
+                        append("\n")
+                    }
+                    result.risks.forEach { append("$it\n") }
+                    result.sender?.let { s ->
+                        append("From: ${s.name}")
+                        s.department?.let { append(", $it") }
+                        append("\n")
+                    }
+                    result.glossaryTerms?.forEach { g ->
+                        append("${g.term}: ${g.plainExplanation}\n")
+                    }
+                }
+            }
+            // Fall through if JSON parse fails — use legacy path below
+        }
+
+        // Legacy fallback: strip JSON syntax from individual columns
         fun cleanJson(json: String): String = json.trim()
             .removePrefix("[")
             .removeSuffix("]")
