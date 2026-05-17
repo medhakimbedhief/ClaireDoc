@@ -21,14 +21,17 @@ import com.google.gson.reflect.TypeToken
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
+import java.util.Locale
 import javax.inject.Inject
 
 sealed class HomeUiState {
@@ -64,7 +67,34 @@ class HomeViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<HomeUiState>(HomeUiState.Loading)
-    val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
+
+    /** Current search query — updated by [updateSearchQuery]. Empty string = no filter. */
+    val searchQuery = MutableStateFlow("")
+
+    /**
+     * Filtered view of sessions. When [searchQuery] is blank the full grouped list is returned
+     * unchanged. When non-blank, items are filtered across title / document type / first action
+     * and sorted by relevance (title hits first, then status order).
+     */
+    val uiState: StateFlow<HomeUiState> = combine(_uiState, searchQuery) { state, query ->
+        if (query.isBlank() || state !is HomeUiState.Sessions) {
+            state
+        } else {
+            val q = query.lowercase(Locale.getDefault())
+            val filtered = state.items.filter { item ->
+                item.session.displayTitle.lowercase(Locale.getDefault()).contains(q) ||
+                item.session.documentType.lowercase(Locale.getDefault()).contains(q) ||
+                item.firstActionDescription?.lowercase(Locale.getDefault())?.contains(q) == true
+            }
+            // Title matches rank above description / type matches
+            val sorted = filtered.sortedWith(
+                compareByDescending<HomeSessionItem> {
+                    it.session.displayTitle.lowercase(Locale.getDefault()).contains(q)
+                }.thenBy { STATUS_ORDER[it.session.status] ?: 99 }
+            )
+            HomeUiState.Sessions(sorted)
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), HomeUiState.Loading)
 
     /** Incremented when a WorkManager indexing job succeeds — triggers isIndexed re-check. */
     private val _indexingRefresh = MutableStateFlow(0)
@@ -157,6 +187,10 @@ class HomeViewModel @Inject constructor(
     private fun parseActions(json: String): List<ActionItem> =
         runCatching { gson.fromJson<List<ActionItem>>(json, ACTION_LIST_TYPE) }
             .getOrElse { emptyList() }
+
+    fun updateSearchQuery(query: String) {
+        searchQuery.value = query
+    }
 
     fun markInProgress(id: String) {
         viewModelScope.launch { repository.updateSessionStatus(id, SessionStatus.IN_PROGRESS) }

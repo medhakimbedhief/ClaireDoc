@@ -5,6 +5,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -23,12 +26,14 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddAPhoto
 import androidx.compose.material.icons.filled.Archive
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DocumentScanner
 import androidx.compose.material.icons.filled.DriveFileRenameOutline
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.TaskAlt
 import androidx.compose.material.icons.filled.Warning
@@ -43,6 +48,7 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.SuggestionChipDefaults
@@ -61,7 +67,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -90,6 +98,8 @@ fun HomeScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val isIndexingActive by viewModel.isIndexingActive.collectAsState()
+    val searchQuery by viewModel.searchQuery.collectAsState()
+    val keyboardController = LocalSoftwareKeyboardController.current
     var selectedItem by remember { mutableStateOf<HomeSessionItem?>(null) }
     var showSheet by remember { mutableStateOf(false) }
     var showRenameDialog by remember { mutableStateOf(false) }
@@ -149,12 +159,80 @@ fun HomeScreen(
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    statusOrder.forEach { status ->
-                        val group = grouped[status] ?: return@forEach
-                        stickyHeader(key = status.name) {
-                            StatusSectionHeader(status = status)
+                    // ── Search bar ────────────────────────────────────────────
+                    item(key = "search_bar") {
+                        OutlinedTextField(
+                            value = searchQuery,
+                            onValueChange = viewModel::updateSearchQuery,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            placeholder = { Text("Search documents…") },
+                            leadingIcon = {
+                                Icon(Icons.Default.Search, contentDescription = null)
+                            },
+                            trailingIcon = {
+                                if (searchQuery.isNotEmpty()) {
+                                    IconButton(onClick = { viewModel.updateSearchQuery("") }) {
+                                        Icon(Icons.Default.Clear, contentDescription = "Clear search")
+                                    }
+                                }
+                            },
+                            singleLine = true,
+                            shape = RoundedCornerShape(50),
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                            keyboardActions = KeyboardActions(
+                                onSearch = { keyboardController?.hide() }
+                            ),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                            )
+                        )
+                    }
+
+                    if (searchQuery.isBlank()) {
+                        // ── Grouped browse view ───────────────────────────────
+                        statusOrder.forEach { status ->
+                            val group = grouped[status] ?: return@forEach
+                            stickyHeader(key = status.name) {
+                                StatusSectionHeader(status = status)
+                            }
+                            items(items = group, key = { it.session.id }) { item ->
+                                DocumentCard(
+                                    item = item,
+                                    isIndexingActive = isIndexingActive,
+                                    onClick = {
+                                        navController.navigate(
+                                            NavRoutes.resultRoute(item.resultJson, item.session.id)
+                                        )
+                                    },
+                                    onLongClick = {
+                                        selectedItem = item
+                                        showSheet = true
+                                    }
+                                )
+                            }
                         }
-                        items(items = group, key = { it.session.id }) { item ->
+                    } else if (state.items.isEmpty()) {
+                        // ── No results ────────────────────────────────────────
+                        item(key = "empty_search") {
+                            Box(
+                                modifier = Modifier
+                                    .fillParentMaxWidth()
+                                    .padding(top = 64.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "No documents match \"$searchQuery\"",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+                        }
+                    } else {
+                        // ── Flat search results (sorted by relevance in VM) ───
+                        items(items = state.items, key = { it.session.id }) { item ->
                             DocumentCard(
                                 item = item,
                                 isIndexingActive = isIndexingActive,
