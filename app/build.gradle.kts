@@ -113,6 +113,9 @@ dependencies {
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)
+    // Bundles a SQLite binary with SQLITE_ENABLE_FTS5 compiled in.
+    // Room uses it via RequerySQLiteOpenHelperFactory in AppModule.
+    implementation(libs.requery.sqlite)
 
     // Protobuf conflict: tasks-genai brings protobuf-java (full runtime) while
     // litertlm-android and localagents-fc use protobuf-javalite (Android-lite).

@@ -15,6 +15,8 @@ dependencyResolutionManagement {
         mavenCentral()
         // Required for localagents-fc:0.1.0 and litertlm-android:0.1.0
         maven { url = uri("https://storage.googleapis.com/ai-edge-maven-release") }
+        // Required for com.github.requery:sqlite-android (SQLite bundled with FTS5)
+        maven { url = uri("https://jitpack.io") }
     }
 }
 rootProject.name = "ClaireDoc"

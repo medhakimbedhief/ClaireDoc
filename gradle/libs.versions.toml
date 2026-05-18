@@ -34,6 +34,10 @@ objectbox = "5.4.2"
 work = "2.9.0"
 coil = "2.6.0"
 junit = "4.13.2"
+# Bundles a SQLite binary compiled with SQLITE_ENABLE_FTS5.
+# Required because some OEM builds and emulator images ship SQLite without fts5.
+# Hosted on JitPack (com.github.requery) — not Maven Central (io.requery).
+requery-sqlite = "3.49.0"
 
 [libraries]
 # Compose
@@ -90,6 +94,9 @@ work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx", version
 
 # Coil — image loading in Compose (document preview sheet)
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
+
+# SQLite with FTS5 — replaces system SQLite via Room's openHelperFactory
+requery-sqlite = { group = "com.github.requery", name = "sqlite-android", version.ref = "requery-sqlite" }
 
 # Testing
 junit = { group = "junit", name = "junit", version.ref = "junit" }

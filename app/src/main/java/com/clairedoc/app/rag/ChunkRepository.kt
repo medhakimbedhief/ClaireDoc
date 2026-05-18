@@ -2,6 +2,7 @@ package com.clairedoc.app.rag
 
 import android.util.Log
 import com.clairedoc.app.data.db.DocumentSession
+import com.clairedoc.app.data.db.FtsChunkDao
 import com.clairedoc.app.data.model.DocumentResult
 import com.google.gson.Gson
 import io.objectbox.BoxStore
@@ -31,9 +32,17 @@ data class RankedChunk(val chunk: DocumentChunk, val score: Double)
 class ChunkRepository @Inject constructor(
     private val store: BoxStore,
     private val embeddingEngine: EmbeddingEngine,
+    private val ftsDao: FtsChunkDao,
     private val gson: Gson
 ) {
     private val box get() = store.boxFor<DocumentChunk>()
+
+    /**
+     * Set to false after the first FTS5 failure (e.g. device SQLite compiled without fts5).
+     * All subsequent FTS calls are skipped immediately, preventing repeated SQLiteLog noise.
+     * Volatile because it may be written from any coroutine worker thread.
+     */
+    @Volatile private var ftsAvailable = true
 
     // ── Indexing ──────────────────────────────────────────────────────────────
 
@@ -61,17 +70,26 @@ class ChunkRepository @Inject constructor(
             )
         }
         box.put(entities)
+        // box.put mutates each entity's @Id in-place — ids are valid immediately after
+        if (ftsAvailable) {
+            entities.forEach { chunk ->
+                runCatching { ftsDao.insertFts(chunk.id, chunk.sessionId, chunk.text) }
+                    .onFailure { e ->
+                        ftsAvailable = false
+                        Log.w(TAG, "FTS5 unavailable — BM25 disabled for this session: ${e.message}")
+                    }
+            }
+        }
         Log.d(TAG, "Session ${session.id} indexed (${entities.size} vectors stored)")
     }
 
     // ── Retrieval ─────────────────────────────────────────────────────────────
 
     /**
-     * Embeds [query] and returns the top-[topK] most semantically similar chunks
-     * for [sessionId], ranked by cosine similarity (highest first).
+     * Returns the top-[topK] most relevant chunks for [sessionId], fusing HNSW
+     * vector search (cosine similarity) with FTS5 BM25 keyword search via RRF.
      *
-     * Uses ObjectBox HNSW approximate nearest-neighbour search. The search
-     * candidate count is set to `topK * 10` (max 200) to improve recall.
+     * Falls back to vector-only if FTS5 is unavailable or the sanitized query is blank.
      */
     suspend fun retrieve(
         sessionId: String,
@@ -81,7 +99,8 @@ class ChunkRepository @Inject constructor(
         val queryVec = embeddingEngine.embedQuery(query)
         val searchCount = minOf(topK * 10, 200)
 
-        store.boxFor<DocumentChunk>()
+        // 1. Vector search filtered to this session
+        val vectorRanked = store.boxFor<DocumentChunk>()
             .query(DocumentChunk_.embedding.nearestNeighbors(queryVec, searchCount))
             .build()
             .findWithScores()
@@ -91,23 +110,52 @@ class ChunkRepository @Inject constructor(
                 // ObjectBox returns cosine DISTANCE (lower = closer); convert to similarity
                 RankedChunk(objectWithScore.get(), score = 1.0 - objectWithScore.score)
             }
+
+        // 2. BM25 keyword search (filtered to session) — skip if FTS5 unavailable
+        val sanitized = sanitizeFtsQuery(query)
+        val bm25Ranked = if (!ftsAvailable || sanitized.isBlank()) emptyList() else
+            runCatching { ftsDao.searchBm25ForSession(sanitized, sessionId, topK) }
+                .onFailure { e ->
+                    ftsAvailable = false
+                    Log.w(TAG, "FTS5 unavailable — switching to vector-only: ${e.message}")
+                }
+                .getOrElse { emptyList() }
+
+        if (bm25Ranked.isEmpty()) return@withContext vectorRanked
+
+        // 3. Fetch chunks for BM25 IDs not already present in vector results
+        val vectorIds = vectorRanked.mapTo(mutableSetOf()) { it.chunk.id }
+        val extraChunks = box.get(bm25Ranked.map { it.chunkId }.filter { it !in vectorIds })
+            .associateBy { it.id }
+
+        // 4. RRF fusion
+        RRF.fuse(vectorRanked, bm25Ranked, extraChunks).take(topK)
     }
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
     /**
-     * Removes all indexed chunks for [sessionId] from ObjectBox.
+     * Removes all indexed chunks for [sessionId] from ObjectBox and FTS5.
      * Call when deleting a Room session or before re-indexing.
      */
     suspend fun deleteChunksForSession(sessionId: String) = withContext(Dispatchers.IO) {
         val toRemove = box.query(DocumentChunk_.sessionId.equal(sessionId)).build().find()
         box.remove(toRemove)
+        if (ftsAvailable) {
+            runCatching { ftsDao.deleteBySessionId(sessionId) }
+                .onFailure { e ->
+                    ftsAvailable = false
+                    Log.w(TAG, "FTS5 unavailable — BM25 index cleanup skipped: ${e.message}")
+                }
+        }
         Log.d(TAG, "Removed ${toRemove.size} chunk(s) for session $sessionId")
     }
 
     /**
-     * Cross-document HNSW search — returns topK most relevant chunks from ALL sessions.
-     * Unlike [retrieve], does NOT filter by sessionId; results span every indexed document.
+     * Cross-document hybrid search — returns topK most relevant chunks from ALL sessions,
+     * fusing HNSW vector search with FTS5 BM25 via RRF.
+     *
+     * Falls back to vector-only if FTS5 is unavailable or the sanitized query is blank.
      */
     suspend fun retrieveAll(
         query: String,
@@ -116,7 +164,8 @@ class ChunkRepository @Inject constructor(
         val queryVec = embeddingEngine.embedQuery(query)
         val searchCount = minOf(topK * 10, 200)
 
-        store.boxFor<DocumentChunk>()
+        // 1. Vector search across all sessions
+        val vectorRanked = store.boxFor<DocumentChunk>()
             .query(DocumentChunk_.embedding.nearestNeighbors(queryVec, searchCount))
             .build()
             .findWithScores()
@@ -125,6 +174,26 @@ class ChunkRepository @Inject constructor(
                 // ObjectBox returns cosine DISTANCE (lower = closer); convert to similarity
                 RankedChunk(objectWithScore.get(), score = 1.0 - objectWithScore.score)
             }
+
+        // 2. BM25 keyword search across all sessions — skip if FTS5 unavailable
+        val sanitized = sanitizeFtsQuery(query)
+        val bm25Ranked = if (!ftsAvailable || sanitized.isBlank()) emptyList() else
+            runCatching { ftsDao.searchBm25(sanitized, topK) }
+                .onFailure { e ->
+                    ftsAvailable = false
+                    Log.w(TAG, "FTS5 unavailable — switching to vector-only: ${e.message}")
+                }
+                .getOrElse { emptyList() }
+
+        if (bm25Ranked.isEmpty()) return@withContext vectorRanked
+
+        // 3. Fetch chunks for BM25 IDs not already present in vector results
+        val vectorIds = vectorRanked.mapTo(mutableSetOf()) { it.chunk.id }
+        val extraChunks = box.get(bm25Ranked.map { it.chunkId }.filter { it !in vectorIds })
+            .associateBy { it.id }
+
+        // 4. RRF fusion
+        RRF.fuse(vectorRanked, bm25Ranked, extraChunks).take(topK)
     }
 
     /**
@@ -154,6 +223,16 @@ class ChunkRepository @Inject constructor(
     fun isEmbedderReady(): Boolean = embeddingEngine.isModelReady()
 
     // ── Private helpers ───────────────────────────────────────────────────────
+
+    /**
+     * Strips FTS5 special characters from a user-supplied query string so that
+     * it can be used safely as an FTS5 MATCH argument.
+     *
+     * Removed characters: `"  *  ^  ~  -  +  :  (  )  |  &  !`
+     * Returns a blank string if nothing remains — callers treat blank as "skip FTS".
+     */
+    private fun sanitizeFtsQuery(raw: String): String =
+        raw.replace(Regex("""["*^~\-+:()|&!]"""), " ").trim()
 
     /**
      * Builds a plain-text corpus from the session for chunking and embedding.
